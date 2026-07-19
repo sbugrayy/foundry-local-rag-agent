@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Foundry RAG Ajanı — Belge Zekâsı Paneli</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+</head>
+<body>
+  <div class="layout">
+    <!-- Kenar çubuğu -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div>
+          <div class="brand-name">Foundry RAG Ajanı</div>
+          <div class="brand-sub">Yerel Belge Zekâsı</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-view="chat">
+          <span class="nav-ico">💬</span> Sohbet
+        </button>
+        <button class="nav-item" data-view="documents">
+          <span class="nav-ico">📄</span> Belgeler
+          <span class="nav-badge" id="docBadge">0</span>
+        </button>
+        <button class="nav-item" data-view="reports">
+          <span class="nav-ico">📊</span> Raporlar
+          <span class="nav-badge" id="reportBadge">0</span>
+        </button>
+        <button class="nav-item" data-view="status">
+          <span class="nav-ico">🖥️</span> Durum
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="model-pill" id="modelPill">
+          <span class="pill-dot loading" id="pillDot"></span>
+          <span id="pillText">Model hazırlanıyor…</span>
+        </div>
+        <div class="sidebar-note">%100 yerel — verileriniz cihazdan çıkmaz</div>
+      </div>
+    </aside>
+
+    <!-- Ana içerik -->
+    <main class="main">
+
+      <!-- SOHBET -->
+      <section class="view active" id="view-chat">
+        <header class="view-header">
+          <h1>Sohbet</h1>
+          <p>Belgelerinle konuş: soru sor, özet iste, rapor üret. Ajan uygun aracı kendisi seçer.</p>
+        </header>
+
+        <div class="chat-box">
+          <div class="chat-messages" id="chatMessages">
+            <div class="chat-welcome" id="chatWelcome">
+              <div class="welcome-icon">🤖</div>
+              <h2>Merhaba! Ben yerel belge ajanınım.</h2>
+              <p>Belgeler yükle, sonra bana sorular sor. Örnekler:</p>
+              <div class="chip-row">
+                <button class="chip" data-example="Yüklü belgelerde neler var?">Yüklü belgelerde neler var?</button>
+                <button class="chip" data-example="Bu belgeyi özetler misin?">Belgeyi özetle</button>
+                <button class="chip" data-example="Bu konu hakkında Word raporu hazırla">Word raporu hazırla</button>
+              </div>
+            </div>
+          </div>
+          <form class="chat-input" id="chatForm">
+            <textarea id="chatText" rows="1" placeholder="Belgelerin hakkında bir şey sor… (Enter: gönder, Shift+Enter: yeni satır)"></textarea>
+            <button type="submit" class="btn btn-primary" id="chatSend">Gönder</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- BELGELER -->
+      <section class="view" id="view-documents">
+        <header class="view-header">
+          <h1>Belgeler</h1>
+          <p>Word, PDF, Excel, CSV ve metin dosyaları yükle — otomatik parçalanır, vektörlenir ve aranabilir olur.</p>
+        </header>
+
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="fileInput" multiple accept=".docx,.pdf,.xlsx,.csv,.txt,.md" hidden>
+          <div class="drop-icon">📂</div>
+          <div class="drop-text"><strong>Dosya bırak</strong> ya da <button class="link-btn" id="browseBtn">bilgisayardan seç</button></div>
+          <div class="drop-hint">.docx · .pdf · .xlsx · .csv · .txt · .md</div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table" id="docsTable">
+            <thead>
+              <tr><th>Dosya</th><th>Boyut</th><th>Durum</th><th>Parça</th><th>Yüklenme</th><th></th></tr>
+            </thead>
+            <tbody id="docsBody"></tbody>
+          </table>
+          <div class="empty-state" id="docsEmpty">Henüz belge yok — yukarıdan yükleyebilirsin.</div>
+        </div>
+      </section>
+
+      <!-- RAPORLAR -->
+      <section class="view" id="view-reports">
+        <header class="view-header">
+          <h1>Raporlar</h1>
+          <p>Belgelerdeki bilgilerden Word, Excel veya PDF raporu üret.</p>
+        </header>
+
+        <div class="card report-form-card">
+          <label class="field-label" for="reportInstruction">Rapor talimatı</label>
+          <textarea id="reportInstruction" rows="3"
+            placeholder="Örn: Yüklediğim satış verilerinden aylık performans raporu hazırla; öne çıkan ürünleri ve toplam ciroyu vurgula."></textarea>
+          <div class="report-form-row">
+            <div class="segmented" id="formatSeg">
+              <button class="seg-item active" data-format="docx">📝 Word</button>
+              <button class="seg-item" data-format="xlsx">📊 Excel</button>
+              <button class="seg-item" data-format="pdf">📕 PDF</button>
+            </div>
+            <button class="btn btn-primary" id="reportCreate">Rapor Oluştur</button>
+          </div>
+          <div class="report-progress" id="reportProgress" hidden>
+            <span class="spinner"></span> Rapor hazırlanıyor — yerel model yazıyor, bu biraz sürebilir…
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table" id="reportsTable">
+            <thead>
+              <tr><th>Başlık</th><th>Biçim</th><th>Oluşturulma</th><th></th></tr>
+            </thead>
+            <tbody id="reportsBody"></tbody>
+          </table>
+          <div class="empty-state" id="reportsEmpty">Henüz rapor üretilmedi.</div>
+        </div>
+      </section>
+
+      <!-- DURUM -->
+      <section class="view" id="view-status">
+        <header class="view-header">
+          <h1>Sistem Durumu</h1>
+          <p>Foundry Local çalışma zamanı, modeller ve veri deposu.</p>
+        </header>
+
+        <div class="status-grid">
+          <div class="card status-card">
+            <div class="status-title">Çalışma Zamanı</div>
+            <div class="status-value" id="stateValue">—</div>
+            <div class="status-msg" id="stateMsg">—</div>
+          </div>
+          <div class="card status-card">
+            <div class="status-title">Sohbet Modeli</div>
+            <div class="status-value small" id="chatModelValue">—</div>
+            <div class="progress"><div class="progress-fill" id="chatModelBar"></div></div>
+          </div>
+          <div class="card status-card">
+            <div class="status-title">Embedding Modeli</div>
+            <div class="status-value small" id="embedModelValue">—</div>
+            <div class="progress"><div class="progress-fill" id="embedModelBar"></div></div>
+          </div>
+          <div class="card status-card">
+            <div class="status-title">Veri Deposu (SQLite)</div>
+            <div class="status-value small" id="storeValue">—</div>
+            <div class="status-msg" id="storeMsg">—</div>
+          </div>
+        </div>
+
+        <div class="card tech-card">
+          <div class="status-title">Teknik Detaylar</div>
+          <div class="tech-rows" id="techRows"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div class="toast-container" id="toasts"></div>
+  <script src="app.js"></script>
+</body>
+</html>
