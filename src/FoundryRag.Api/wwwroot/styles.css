@@ -325,6 +325,7 @@ body {
 .seg-item.active { background: var(--panel-2); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
 
 .report-progress { display: flex; align-items: center; gap: 10px; color: var(--warn); font-size: 13px; }
+.report-progress[hidden] { display: none; }
 .spinner {
   width: 15px; height: 15px; border-radius: 50%;
   border: 2px solid var(--border); border-top-color: var(--accent);

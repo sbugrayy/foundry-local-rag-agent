@@ -78,18 +78,19 @@ public sealed class AgentOrchestrator
             {"action":"chat|summarize|report|list_docs","document":"<belge adı veya null>","format":"docx|xlsx|pdf|null","topic":"<konu veya null>"}
 
             Eylem seçimi:
-            - "summarize": kullanıcı belirli BİR belgenin özetini istiyorsa (örn. "X dosyasını özetle").
-            - "report": kullanıcı Word/Excel/PDF dosyası olarak rapor/döküman ÜRETMEK istiyorsa (örn. "... hakkında rapor hazırla", "Word raporu oluştur").
-            - "list_docs": kullanıcı hangi belgelerin yüklü olduğunu soruyorsa.
-            - "chat": diğer her şey — belgelerle ilgili soru-cevap dahil.
+            - "chat": VARSAYILAN eylem. Belgelerle ilgili her soru-cevap ("ne kadar", "hangisi", "neden", "kim", "ne zaman"...) chat'tir.
+            - "summarize": SADECE kullanıcı açıkça özet isterse ("özetle", "özet çıkar", "özetini ver"). Belgedeki belirli bir bilgiyi sormak summarize DEĞİLDİR, chat'tir.
+            - "report": SADECE kullanıcı dosya olarak rapor/döküman ÜRETMEK isterse ("rapor hazırla", "Word dosyası oluştur", "Excel'e dök").
+            - "list_docs": SADECE hangi belgelerin yüklü olduğu sorulursa.
 
             format kuralı (sadece report için): "Word" → docx, "Excel" → xlsx, "PDF" → pdf, belirtilmemişse docx.
             document alanı yüklü belgelerden birebir seçilmeli. Yüklü belgeler: {{docList}}
 
             Örnekler:
+            Kullanıcı: "toplam ciro ne kadar ve en güçlü çeyrek hangisi?" → {"action":"chat","document":null,"format":null,"topic":null}
+            Kullanıcı: "projenin riskleri neler?" → {"action":"chat","document":null,"format":null,"topic":null}
             Kullanıcı: "satış raporunu özetler misin" → {"action":"summarize","document":"satis-raporu.pdf","format":null,"topic":null}
             Kullanıcı: "2025 gelirleri hakkında Excel raporu hazırla" → {"action":"report","document":null,"format":"xlsx","topic":"2025 gelirleri"}
-            Kullanıcı: "projenin riskleri neler?" → {"action":"chat","document":null,"format":null,"topic":null}
             """;
 
         var raw = await _rag.CompleteAsync(system, message, temperature: 0, maxTokens: 200, ct: ct);

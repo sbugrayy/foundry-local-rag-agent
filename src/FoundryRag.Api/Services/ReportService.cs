@@ -396,10 +396,18 @@ public sealed class ReportService
 
     private static string BuildFileName(string title, string format)
     {
-        var safe = Regex.Replace(title, @"[^\w\sğüşıöçĞÜŞİÖÇ-]", "")
+        // Türkçe karakterleri ASCII'ye çevir — Content-Disposition başlığı ve
+        // farklı dosya sistemleri için en sorunsuz yol
+        var map = new Dictionary<char, char>
+        {
+            ['ğ'] = 'g', ['ü'] = 'u', ['ş'] = 's', ['ı'] = 'i', ['ö'] = 'o', ['ç'] = 'c',
+            ['Ğ'] = 'G', ['Ü'] = 'U', ['Ş'] = 'S', ['İ'] = 'I', ['Ö'] = 'O', ['Ç'] = 'C'
+        };
+        var ascii = new string(title.Select(c => map.TryGetValue(c, out var m) ? m : c).ToArray());
+        var safe = Regex.Replace(ascii, @"[^\w\s-]", "")
             .Trim()
-            .Replace(' ', '-')
             .ToLowerInvariant();
+        safe = Regex.Replace(safe, @"[\s-]+", "-");
         if (safe.Length > 50) safe = safe[..50].TrimEnd('-');
         if (safe.Length == 0) safe = "rapor";
         return $"{DateTime.Now:yyyyMMdd-HHmmss}-{safe}.{format}";
