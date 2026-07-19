@@ -42,8 +42,11 @@ public record ReportInfo(
     string Instruction,
     DateTime CreatedAtUtc);
 
-/// <summary>Rapor üretme isteği. Format: "docx" | "xlsx" | "pdf".</summary>
-public record ReportRequest(string Instruction, string Format);
+/// <summary>
+/// Rapor üretme isteği. Format: "docx" | "xlsx" | "pdf".
+/// DocumentId verilirse içerik yalnızca o belgeden toplanır.
+/// </summary>
+public record ReportRequest(string Instruction, string Format, long? DocumentId = null);
 
 /// <summary>Vektör aramasından dönen isabet.</summary>
 public record SearchHit(

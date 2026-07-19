@@ -16,6 +16,7 @@
 | 📋 **Özetleme** | Uzun belgelerde map-reduce stratejisiyle (parça özetleri → birleşik özet) çalışır |
 | 📊 **Rapor üretimi** | "Satış verilerinden aylık rapor hazırla" de; ajan **Word / Excel / PDF** dosyası üretir |
 | 🤖 **Agentic yönlendirme** | Ajan, mesajına göre doğru aracı seçer: arama, özetleme, rapor üretme, listeleme |
+| 🎯 **Belge kapsamı (@bahsetme)** | Sohbette `@dosyaadi` yaz (menü açılır) ya da rapor formunda belge seç — arama yalnızca o belgeye kapsamlanır; ayrıca benzerlik eşiği alakasız belgelerin bağlama sızmasını engeller |
 | 🖥️ **Yönetim paneli** | Türkçe, koyu temalı web arayüzü: belgeler, sohbet, raporlar, sistem durumu |
 
 ## Mimari
@@ -92,7 +93,7 @@ bileşenlerini ve modelleri (`phi-4-mini` ≈ 3,5 GB + `qwen3-embedding-0.6b` �
 | POST | `/api/chat` | Agentic sohbet (akışsız) — `{message, history}` |
 | POST | `/api/chat/stream` | **SSE akışlı** agentic sohbet — olaylar: `status` / `sources` / `delta` / `report` / `done` / `error` |
 | GET | `/api/reports` | Rapor listesi |
-| POST | `/api/reports` | Rapor üret — `{instruction, format: docx\|xlsx\|pdf}` |
+| POST | `/api/reports` | Rapor üret — `{instruction, format: docx\|xlsx\|pdf, documentId?: number}` (documentId verilirse yalnız o belgeden) |
 | GET | `/api/reports/{id}/download` | Raporu indir |
 | DELETE | `/api/reports/{id}` | Raporu sil |
 

@@ -180,7 +180,9 @@ api.MapPost("/reports", async (ReportRequest request, AgentOrchestrator agent, C
 
     try
     {
-        var (report, sources) = await agent.GenerateReportAsync(request.Instruction, format, ct: ct);
+        var scope = request.DocumentId is long docId ? new[] { docId } : null;
+        var (report, sources) = await agent.GenerateReportAsync(
+            request.Instruction, format, documentIds: scope, ct: ct);
         return Results.Ok(new { report, sources });
     }
     catch (InvalidOperationException ex)
