@@ -89,7 +89,8 @@ bileşenlerini ve modelleri (`phi-4-mini` ≈ 3,5 GB + `qwen3-embedding-0.6b` �
 | POST | `/api/documents/upload` | Çoklu dosya yükleme (multipart) |
 | DELETE | `/api/documents/{id}` | Belgeyi ve parçalarını sil |
 | POST | `/api/documents/{id}/summarize` | Belgeyi özetle |
-| POST | `/api/chat` | Agentic sohbet — `{message, history}` |
+| POST | `/api/chat` | Agentic sohbet (akışsız) — `{message, history}` |
+| POST | `/api/chat/stream` | **SSE akışlı** agentic sohbet — olaylar: `status` / `sources` / `delta` / `report` / `done` / `error` |
 | GET | `/api/reports` | Rapor listesi |
 | POST | `/api/reports` | Rapor üret — `{instruction, format: docx\|xlsx\|pdf}` |
 | GET | `/api/reports/{id}/download` | Raporu indir |
@@ -115,7 +116,7 @@ src/FoundryRag.Api/
 
 ## Yol Haritası
 
-- [ ] Streaming cevaplar (SSE) — uzun cevaplarda kelime kelime akış
+- [x] Streaming cevaplar (SSE) — sohbet, özet ve rapor akışı kelime kelime / durum olaylarıyla
 - [ ] Var olan Word/Excel dosyasında yerinde düzenleme
 - [ ] Native function calling'e geçiş (Foundry Local model desteği yaygınlaşınca)
 - [ ] Sohbet geçmişinin SQLite'ta kalıcılaştırılması
