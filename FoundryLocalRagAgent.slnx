@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FoundryRag.Api/FoundryRag.Api.csproj" />
+  </Folder>
+</Solution>
