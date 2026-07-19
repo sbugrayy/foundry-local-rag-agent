@@ -19,6 +19,9 @@ public sealed class FoundryService : BackgroundService
     // Embedding istemcisinin somut tipini alanda tutmamak için delege kullanıyoruz.
     private Func<string[], Task<float[][]>>? _embedFn;
     private readonly SemaphoreSlim _embedLock = new(1, 1);
+    private readonly SemaphoreSlim _retrySignal = new(0);
+    private bool _sdkCreated;
+    private bool _webServiceStarted;
 
     public string State { get; private set; } = "starting";
     public string StatusMessage { get; private set; } = "Başlatılıyor...";
@@ -47,7 +50,47 @@ public sealed class FoundryService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        try
+        var attempt = 0;
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            attempt++;
+            try
+            {
+                await InitializeAsync(stoppingToken);
+                return; // başarı — servis hazır
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Foundry Local başlatılamadı (deneme {Attempt})", attempt);
+                var delay = TimeSpan.FromSeconds(Math.Min(10 * attempt, 60));
+                SetState("error",
+                    $"Başlatma hatası (deneme {attempt}): {FirstLine(ex.Message)} — " +
+                    $"{delay.TotalSeconds:F0} sn içinde otomatik yeniden denenecek.");
+
+                // Bekle; 'Yeniden Dene' sinyali gelirse hemen devam et
+                try
+                {
+                    var retryTask = _retrySignal.WaitAsync(stoppingToken);
+                    await Task.WhenAny(Task.Delay(delay, stoppingToken), retryTask);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+            }
+        }
+    }
+
+    /// <summary>Hata durumundayken kullanıcı arayüzünden anında yeniden deneme tetikler.</summary>
+    public void RequestRetry() => _retrySignal.Release();
+
+    private async Task InitializeAsync(CancellationToken stoppingToken)
+    {
+        if (!_sdkCreated)
         {
             SetState("initializing", "Foundry Local SDK başlatılıyor...");
             var config = new Configuration
@@ -57,52 +100,58 @@ public sealed class FoundryService : BackgroundService
                 Web = new Configuration.WebService { Urls = _inferenceUrl }
             };
             await FoundryLocalManager.CreateAsync(config, _logger);
-            var mgr = FoundryLocalManager.Instance;
+            _sdkCreated = true;
+        }
+        var mgr = FoundryLocalManager.Instance;
 
-            SetState("initializing", "Donanım hızlandırma bileşenleri denetleniyor (ilk seferde indirilir)...");
-            await mgr.DownloadAndRegisterEpsAsync((epName, percent) =>
-            {
-                CurrentEp = epName;
-                EpPercent = percent;
-            });
+        SetState("initializing", "Donanım hızlandırma bileşenleri denetleniyor (ilk seferde indirilir)...");
+        await mgr.DownloadAndRegisterEpsAsync((epName, percent) =>
+        {
+            CurrentEp = epName;
+            EpPercent = percent;
+        });
 
-            var catalog = await mgr.GetCatalogAsync();
+        var catalog = await mgr.GetCatalogAsync();
 
-            var chatModel = await catalog.GetModelAsync(_chatAlias)
-                ?? throw new InvalidOperationException($"'{_chatAlias}' modeli katalogda bulunamadı.");
-            SetState("downloading", $"Sohbet modeli indiriliyor: {_chatAlias} (önbellekteyse atlanır)");
-            await chatModel.DownloadAsync(p => ChatDownloadPercent = p);
+        var chatModel = await catalog.GetModelAsync(_chatAlias)
+            ?? throw new InvalidOperationException($"'{_chatAlias}' modeli katalogda bulunamadı.");
+        SetState("downloading", $"Sohbet modeli indiriliyor: {_chatAlias} (önbellekteyse atlanır)");
+        await chatModel.DownloadAsync(p => ChatDownloadPercent = p);
 
-            var embedModel = await catalog.GetModelAsync(_embedAlias)
-                ?? throw new InvalidOperationException($"'{_embedAlias}' modeli katalogda bulunamadı.");
-            SetState("downloading", $"Embedding modeli indiriliyor: {_embedAlias} (önbellekteyse atlanır)");
-            await embedModel.DownloadAsync(p => EmbedDownloadPercent = p);
+        var embedModel = await catalog.GetModelAsync(_embedAlias)
+            ?? throw new InvalidOperationException($"'{_embedAlias}' modeli katalogda bulunamadı.");
+        SetState("downloading", $"Embedding modeli indiriliyor: {_embedAlias} (önbellekteyse atlanır)");
+        await embedModel.DownloadAsync(p => EmbedDownloadPercent = p);
 
-            SetState("loading", $"Modeller belleğe yükleniyor: {_chatAlias} + {_embedAlias}");
-            await chatModel.LoadAsync();
-            await embedModel.LoadAsync();
-            ChatModelId = chatModel.Id;
-            EmbeddingModelId = embedModel.Id;
+        SetState("loading", $"Modeller belleğe yükleniyor: {_chatAlias} + {_embedAlias}");
+        await chatModel.LoadAsync();
+        await embedModel.LoadAsync();
+        ChatModelId = chatModel.Id;
+        EmbeddingModelId = embedModel.Id;
 
-            var embeddingClient = await embedModel.GetEmbeddingClientAsync();
-            _embedFn = async texts =>
-            {
-                var response = await embeddingClient.GenerateEmbeddingsAsync(texts);
-                return response.Data
-                    .Select(d => d.Embedding.Select(v => (float)v).ToArray())
-                    .ToArray();
-            };
+        var embeddingClient = await embedModel.GetEmbeddingClientAsync();
+        _embedFn = async texts =>
+        {
+            var response = await embeddingClient.GenerateEmbeddingsAsync(texts);
+            return response.Data
+                .Select(d => d.Embedding.Select(v => (float)v).ToArray())
+                .ToArray();
+        };
 
+        if (!_webServiceStarted)
+        {
             SetState("loading", "Yerel çıkarım servisi başlatılıyor...");
             await mgr.StartWebServiceAsync();
+            _webServiceStarted = true;
+        }
 
-            SetState("ready", $"Hazır — {_chatAlias} & {_embedAlias} yüklü, endpoint: {InferenceBaseUrl}");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Foundry Local başlatılamadı");
-            SetState("error", $"Foundry Local başlatılamadı: {ex.Message}");
-        }
+        SetState("ready", $"Hazır — {_chatAlias} & {_embedAlias} yüklü, endpoint: {InferenceBaseUrl}");
+    }
+
+    private static string FirstLine(string message)
+    {
+        var line = message.Split('\n')[0].Trim();
+        return line.Length > 220 ? line[..220] + "…" : line;
     }
 
     /// <summary>Metinleri vektöre çevirir. Model hazır değilse hata fırlatır.</summary>

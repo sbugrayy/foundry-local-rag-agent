@@ -144,6 +144,7 @@ async function refreshStatus() {
     $("#stateValue").textContent = stateTr[s.state] || s.state;
     $("#stateValue").style.color = s.state === "ready" ? "var(--ok)" : s.state === "error" ? "var(--danger)" : "var(--warn)";
     $("#stateMsg").textContent = s.message;
+    $("#retryBtn").hidden = s.state !== "error";
 
     $("#chatModelValue").textContent = s.chatModel.id || s.chatModel.alias;
     $("#chatModelBar").style.width = `${s.state === "ready" ? 100 : (s.chatModel.downloadPercent || 0)}%`;
@@ -432,6 +433,16 @@ $("#reportCreate").addEventListener("click", async () => {
   } finally {
     $("#reportCreate").disabled = false;
     $("#reportProgress").hidden = true;
+  }
+});
+
+$("#retryBtn").addEventListener("click", async () => {
+  try {
+    await api("/foundry/retry", { method: "POST" });
+    toast("Yeniden deneme başlatıldı…", "success");
+    setTimeout(refreshStatus, 800);
+  } catch (err) {
+    toast(err.message, "error");
   }
 });
 

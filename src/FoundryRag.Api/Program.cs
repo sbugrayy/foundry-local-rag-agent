@@ -52,6 +52,12 @@ api.MapGet("/status", async (FoundryService foundry, VectorStore db) =>
     });
 });
 
+api.MapPost("/foundry/retry", (FoundryService foundry) =>
+{
+    foundry.RequestRetry();
+    return Results.Ok(new { ok = true, message = "Yeniden deneme tetiklendi." });
+});
+
 // ---------- Belgeler ----------
 
 api.MapGet("/documents", async (VectorStore db) =>
