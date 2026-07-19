@@ -219,6 +219,17 @@ body {
 .report-card-title { font-weight: 600; font-size: 13.5px; }
 .report-card-sub { font-size: 11.5px; color: var(--text-dim); }
 
+.stream-cursor {
+  display: inline-block;
+  color: var(--accent-2);
+  animation: cursorBlink 0.9s steps(1) infinite;
+}
+@keyframes cursorBlink { 50% { opacity: 0; } }
+.stream-status {
+  display: flex; align-items: center; gap: 9px;
+  color: var(--text-dim); font-style: italic; font-size: 13px;
+}
+
 .msg-typing { display: flex; gap: 5px; padding: 6px 2px; }
 .msg-typing span {
   width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim);

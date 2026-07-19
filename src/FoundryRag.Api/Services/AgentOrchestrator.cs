@@ -59,6 +59,116 @@ public sealed class AgentOrchestrator
         }
     }
 
+    /// <summary>
+    /// Akışlı agentic sohbet: her adım SSE olayı olarak yayınlanır.
+    /// Olay tipleri: status (ara durum), sources (kaynaklar), delta (cevap parçası),
+    /// report (üretilen rapor), done (bitiş), error (hata).
+    /// </summary>
+    public async Task HandleStreamAsync(ChatRequest request, Func<object, Task> emit, CancellationToken ct = default)
+    {
+        try
+        {
+            if (!_rag.IsReady)
+            {
+                await emit(new
+                {
+                    type = "error",
+                    message = "Yerel model henüz hazırlanıyor (ilk açılışta model indirme birkaç dakika sürebilir). " +
+                              "**Durum** sekmesinden ilerlemeyi izleyebilirsin."
+                });
+                return;
+            }
+
+            await emit(new { type = "status", stage = "routing", message = "Ajan uygun aracı seçiyor…" });
+            var route = await RouteAsync(request.Message, ct);
+            _logger.LogInformation("Ajan yönlendirmesi (akış): {Action} (belge: {Doc}, format: {Fmt})",
+                route.Action, route.Document, route.Format);
+
+            if (route.Action == "summarize")
+            {
+                var doc = await ResolveDocumentAsync(route.Document);
+                if (doc is not null)
+                {
+                    await emit(new
+                    {
+                        type = "sources",
+                        sources = new List<SourceRef> { new(doc.Id, doc.FileName, 0, 1.0, "Belgenin tamamı özetlendi") }
+                    });
+                    await emit(new { type = "delta", text = $"**{doc.FileName}** özeti:\n\n" });
+                    await foreach (var delta in _rag.SummarizeDocumentStreamAsync(
+                        doc.Id,
+                        stage: msg => emit(new { type = "status", stage = "summarizing", message = msg }),
+                        ct))
+                    {
+                        await emit(new { type = "delta", text = delta });
+                    }
+                    await emit(new { type = "done", action = "summarize" });
+                    return;
+                }
+                // Belge çözülemedi → normal sohbet akışına düş
+            }
+            else if (route.Action == "report")
+            {
+                var format = route.Format is "docx" or "xlsx" or "pdf" ? route.Format : "docx";
+                var formatName = format switch { "xlsx" => "Excel", "pdf" => "PDF", _ => "Word" };
+                await emit(new
+                {
+                    type = "status",
+                    stage = "writing",
+                    message = $"Belgelerden bağlam toplanıyor ve {formatName} raporu yazılıyor — bu bir dakikayı bulabilir…"
+                });
+
+                var (report, sources) = await GenerateReportAsync(request.Message, format, route.Topic, ct);
+                await emit(new { type = "sources", sources });
+                await emit(new { type = "report", report });
+                await emit(new
+                {
+                    type = "delta",
+                    text = $"**{report.Title}** başlıklı {formatName} raporunu belgelerdeki içeriğe dayanarak oluşturdum. " +
+                           $"Aşağıdan indirebilir veya **Raporlar** sekmesinden yönetebilirsin."
+                });
+                await emit(new { type = "done", action = "report" });
+                return;
+            }
+            else if (route.Action == "list_docs")
+            {
+                var response = await HandleListDocsAsync();
+                await emit(new { type = "delta", text = response.Answer });
+                await emit(new { type = "done", action = "list_docs" });
+                return;
+            }
+
+            // Varsayılan: RAG soru-cevap akışı (çözülemeyen summarize da buraya düşer)
+            await emit(new { type = "status", stage = "searching", message = "Belgelerde aranıyor…" });
+            var ragContext = await _rag.PrepareAnswerAsync(request.Message, ct);
+            if (!ragContext.HasChunks)
+            {
+                await emit(new { type = "delta", text = RagService.NoDocsAnswer });
+                await emit(new { type = "done", action = "chat" });
+                return;
+            }
+
+            await emit(new { type = "sources", sources = ragContext.Sources });
+            await emit(new { type = "status", stage = "generating", message = "Cevap yazılıyor…" });
+            await foreach (var delta in _rag.CompleteStreamAsync(
+                ragContext.SystemPrompt, request.Message, request.History,
+                temperature: 0.2, maxTokens: 900, ct: ct))
+            {
+                await emit(new { type = "delta", text = delta });
+            }
+            await emit(new { type = "done", action = "chat" });
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // İstemci bağlantıyı kapattı — sessizce bitir
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Akışlı ajan eylemi başarısız");
+            await emit(new { type = "error", message = $"İşlem sırasında hata oluştu: {ex.Message}" });
+        }
+    }
+
     // ---------- Yönlendirme ----------
 
     private sealed record Route(string Action, string? Document, string? Format, string? Topic);

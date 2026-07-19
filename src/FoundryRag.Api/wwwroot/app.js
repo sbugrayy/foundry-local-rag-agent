@@ -188,18 +188,6 @@ function addMessage(role, contentHtml) {
   return wrap.querySelector(".msg-bubble");
 }
 
-function addTyping() {
-  $("#chatWelcome")?.remove();
-  const wrap = document.createElement("div");
-  wrap.className = "msg assistant";
-  wrap.id = "typingMsg";
-  wrap.innerHTML = `
-    <div class="msg-avatar">🤖</div>
-    <div class="msg-bubble"><div class="msg-typing"><span></span><span></span><span></span></div></div>`;
-  chatMessages.appendChild(wrap);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
 function renderSources(sources) {
   if (!sources || sources.length === 0) return "";
   const items = sources.map(s =>
@@ -226,25 +214,89 @@ function renderReportCard(report) {
     </div>`;
 }
 
+/** SSE akışını okuyup olay olay işler (fetch + ReadableStream; EventSource POST desteklemez). */
 async function sendChat(message) {
   addMessage("user", renderMarkdown(message));
   state.history.push({ role: "user", content: message });
-  addTyping();
   $("#chatSend").disabled = true;
 
+  const bubble = addMessage("assistant",
+    '<div class="msg-typing"><span></span><span></span><span></span></div>');
+
+  let answer = "";
+  let sources = null;
+  let report = null;
+  let errorMsg = null;
+
+  const renderLive = () => {
+    bubble.innerHTML = renderMarkdown(answer) + '<span class="stream-cursor">▍</span>';
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  };
+
+  const handleEvent = (e) => {
+    switch (e.type) {
+      case "status":
+        // Cevap akmaya başladıysa ara durumları gösterme
+        if (!answer) {
+          bubble.innerHTML = `<p class="stream-status"><span class="spinner"></span> ${escapeHtml(e.message)}</p>`;
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        break;
+      case "delta":
+        answer += e.text;
+        renderLive();
+        break;
+      case "sources":
+        sources = e.sources;
+        break;
+      case "report":
+        report = e.report;
+        loadReports();
+        break;
+      case "error":
+        errorMsg = e.message;
+        break;
+    }
+  };
+
   try {
-    const res = await api("/chat", {
+    const res = await fetch("/api/chat/stream", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, history: state.history.slice(0, -1) }),
     });
-    $("#typingMsg")?.remove();
-    addMessage("assistant",
-      renderMarkdown(res.answer) + renderReportCard(res.report) + renderSources(res.sources));
-    state.history.push({ role: "assistant", content: res.answer });
-    if (res.action === "report") loadReports();
+    if (!res.ok || !res.body) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Sunucu hatası (${res.status})`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop();
+      for (const raw of events) {
+        const dataLine = raw.split("\n").find(l => l.startsWith("data: "));
+        if (!dataLine) continue;
+        try { handleEvent(JSON.parse(dataLine.slice(6))); } catch { /* bozuk satırı atla */ }
+      }
+    }
+
+    if (errorMsg) {
+      bubble.innerHTML = (answer ? renderMarkdown(answer) : "") + `<p>⚠️ ${escapeHtml(errorMsg)}</p>`;
+    } else {
+      bubble.innerHTML = renderMarkdown(answer)
+        + renderReportCard(report)
+        + renderSources(sources || []);
+    }
+    if (answer) state.history.push({ role: "assistant", content: answer });
+    chatMessages.scrollTop = chatMessages.scrollHeight;
   } catch (err) {
-    $("#typingMsg")?.remove();
-    addMessage("assistant", `<p>⚠️ ${escapeHtml(err.message)}</p>`);
+    bubble.innerHTML = `<p>⚠️ ${escapeHtml(err.message)}</p>`;
   } finally {
     $("#chatSend").disabled = false;
     chatText.focus();

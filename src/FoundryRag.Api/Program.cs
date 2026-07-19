@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FoundryRag.Api.Models;
 using FoundryRag.Api.Services;
 using Microsoft.AspNetCore.Http.Features;
@@ -128,6 +129,39 @@ api.MapPost("/chat", async (ChatRequest request, AgentOrchestrator agent, Cancel
         return Results.BadRequest(new { error = "Mesaj boş olamaz." });
     var response = await agent.HandleAsync(request, ct);
     return Results.Ok(response);
+});
+
+// SSE akışlı sohbet: her olay `data: {json}\n\n` satırı olarak yazılır.
+// Olay tipleri: status | sources | delta | report | done | error
+var sseJson = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+api.MapPost("/chat/stream", async (HttpContext http, ChatRequest request, AgentOrchestrator agent) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Message))
+    {
+        http.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await http.Response.WriteAsJsonAsync(new { error = "Mesaj boş olamaz." });
+        return;
+    }
+
+    http.Response.ContentType = "text/event-stream; charset=utf-8";
+    http.Response.Headers.CacheControl = "no-cache";
+    http.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
+
+    var ct = http.RequestAborted;
+    async Task Emit(object payload)
+    {
+        await http.Response.WriteAsync($"data: {JsonSerializer.Serialize(payload, sseJson)}\n\n", ct);
+        await http.Response.Body.FlushAsync(ct);
+    }
+
+    try
+    {
+        await agent.HandleStreamAsync(request, Emit, ct);
+    }
+    catch (OperationCanceledException)
+    {
+        // İstemci bağlantıyı kapattı
+    }
 });
 
 // ---------- Raporlar ----------

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 using FoundryRag.Api.Models;
 using Microsoft.SemanticKernel;
@@ -5,6 +6,9 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 
 namespace FoundryRag.Api.Services;
+
+/// <summary>RAG cevabı için hazırlanan bağlam: sistem istemi + kaynaklar.</summary>
+public sealed record RagContext(bool HasChunks, string SystemPrompt, List<SourceRef> Sources);
 
 /// <summary>
 /// Semantic Kernel üzerinden Foundry Local'ın OpenAI-uyumlu endpoint'ine
@@ -65,7 +69,44 @@ public sealed class RagService
     {
         var kernel = GetKernel();
         var chat = kernel.GetRequiredService<IChatCompletionService>();
+        var chatHistory = BuildChatHistory(systemPrompt, userMessage, history);
+        var settings = new OpenAIPromptExecutionSettings
+        {
+            Temperature = temperature,
+            MaxTokens = maxTokens
+        };
 
+        var result = await chat.GetChatMessageContentAsync(chatHistory, settings, kernel, ct);
+        return result.Content?.Trim() ?? "";
+    }
+
+    /// <summary>Akışlı sohbet tamamlama: cevap parçalarını (delta) üretildikçe döndürür.</summary>
+    public async IAsyncEnumerable<string> CompleteStreamAsync(
+        string systemPrompt,
+        string userMessage,
+        List<ChatTurn>? history = null,
+        double temperature = 0.2,
+        int maxTokens = 900,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var kernel = GetKernel();
+        var chat = kernel.GetRequiredService<IChatCompletionService>();
+        var chatHistory = BuildChatHistory(systemPrompt, userMessage, history);
+        var settings = new OpenAIPromptExecutionSettings
+        {
+            Temperature = temperature,
+            MaxTokens = maxTokens
+        };
+
+        await foreach (var chunk in chat.GetStreamingChatMessageContentsAsync(chatHistory, settings, kernel, ct))
+        {
+            if (!string.IsNullOrEmpty(chunk.Content))
+                yield return chunk.Content;
+        }
+    }
+
+    private static ChatHistory BuildChatHistory(string systemPrompt, string userMessage, List<ChatTurn>? history)
+    {
         var chatHistory = new ChatHistory();
         chatHistory.AddSystemMessage(systemPrompt);
         if (history is not null)
@@ -79,29 +120,23 @@ public sealed class RagService
             }
         }
         chatHistory.AddUserMessage(userMessage);
-
-        var settings = new OpenAIPromptExecutionSettings
-        {
-            Temperature = temperature,
-            MaxTokens = maxTokens
-        };
-
-        var result = await chat.GetChatMessageContentAsync(chatHistory, settings, kernel, ct);
-        return result.Content?.Trim() ?? "";
+        return chatHistory;
     }
 
-    /// <summary>RAG cevabı: sorguyu embed et → en ilgili parçaları bul → bağlamla cevapla.</summary>
-    public async Task<(string Answer, List<SourceRef> Sources)> AnswerAsync(
-        string question,
-        List<ChatTurn>? history,
-        CancellationToken ct = default)
+    /// <summary>Belge yokken dönülecek standart cevap.</summary>
+    public const string NoDocsAnswer =
+        "Henüz işlenmiş belge yok. Önce **Belgeler** sekmesinden dosya yükleyin; " +
+        "ben de sorularınızı o belgelere dayanarak cevaplayayım.";
+
+    /// <summary>
+    /// RAG hazırlığı: sorguyu embed et → en ilgili parçaları bul → sistem istemi ve
+    /// kaynak listesini üret. Hem akışlı hem akışsız cevap yolu bunu kullanır.
+    /// </summary>
+    public async Task<RagContext> PrepareAnswerAsync(string question, CancellationToken ct = default)
     {
         var (_, chunkCount) = await _db.GetCountsAsync();
         if (chunkCount == 0)
-        {
-            return ("Henüz işlenmiş belge yok. Önce **Belgeler** sekmesinden dosya yükleyin; " +
-                    "ben de sorularınızı o belgelere dayanarak cevaplayayım.", []);
-        }
+            return new RagContext(false, "", []);
 
         var queryVector = await _embeddings.EmbedOneAsync(question, ct);
         var hits = await _db.SearchAsync(queryVector, _topK);
@@ -111,15 +146,14 @@ public sealed class RagService
             Sen "Foundry RAG Ajanı" adlı, tamamen yerel çalışan bir belge asistanısın.
             Görevin: SADECE aşağıdaki BAĞLAM'daki bilgileri kullanarak Türkçe cevap vermek.
             Kurallar:
+            - Soruyu ya da bağlam metnini TEKRARLAMA; doğrudan cevabın kendisiyle başla.
             - Bağlamda cevap yoksa açıkça "Bu bilgi yüklü belgelerde bulunmuyor." de; asla tahmin etme, uydurma.
-            - Cevapta yararlandığın kaynak dosya adlarını köşeli parantezle belirt, örn: [rapor.docx].
+            - Cevapta yararlandığın kaynak dosya adlarını köşeli parantez içinde belirt (yalnızca bağlamda gerçekten geçen dosya adlarını yaz).
             - Kısa, net ve düzenli yaz; gerekirse madde işareti kullan.
 
             BAĞLAM:
             {context}
             """;
-
-        var answer = await CompleteAsync(systemPrompt, question, history, temperature: 0.2, maxTokens: 900, ct: ct);
 
         var sources = hits
             .Select(h => new SourceRef(
@@ -127,7 +161,22 @@ public sealed class RagService
                 h.Text.Length > 220 ? h.Text[..220] + "…" : h.Text))
             .ToList();
 
-        return (answer, sources);
+        return new RagContext(true, systemPrompt, sources);
+    }
+
+    /// <summary>RAG cevabı (akışsız): /api/chat ucu ve dahili kullanım için.</summary>
+    public async Task<(string Answer, List<SourceRef> Sources)> AnswerAsync(
+        string question,
+        List<ChatTurn>? history,
+        CancellationToken ct = default)
+    {
+        var ragContext = await PrepareAnswerAsync(question, ct);
+        if (!ragContext.HasChunks)
+            return (NoDocsAnswer, []);
+
+        var answer = await CompleteAsync(ragContext.SystemPrompt, question, history,
+            temperature: 0.2, maxTokens: 900, ct: ct);
+        return (answer, ragContext.Sources);
     }
 
     /// <summary>Konuya göre bağlam toplar (rapor üretimi için, sohbetten daha geniş).</summary>
@@ -177,6 +226,61 @@ public sealed class RagService
 
         await _db.SetSummaryAsync(documentId, summary);
         return summary;
+    }
+
+    /// <summary>
+    /// Akışlı özetleme: ara bölüm özetleri (map) akışsız üretilir ve <paramref name="stage"/>
+    /// ile durum bildirilir; son birleştirme (reduce) delta delta akar. Özet, akış bitince
+    /// belgeye kaydedilir.
+    /// </summary>
+    public async IAsyncEnumerable<string> SummarizeDocumentStreamAsync(
+        long documentId,
+        Func<string, Task>? stage = null,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var doc = await _db.GetDocumentAsync(documentId)
+            ?? throw new KeyNotFoundException("Belge bulunamadı.");
+        if (doc.Status != "ready")
+            throw new InvalidOperationException($"Belge henüz işlenmedi (durum: {doc.Status}).");
+
+        var chunkTexts = await _db.GetChunkTextsAsync(documentId);
+        var groups = GroupByBudget(chunkTexts, 6000);
+
+        string finalInput;
+        if (groups.Count == 1)
+        {
+            finalInput = groups[0];
+        }
+        else
+        {
+            var partials = new List<string>();
+            for (var i = 0; i < groups.Count; i++)
+            {
+                if (stage is not null)
+                    await stage($"Bölüm {i + 1}/{groups.Count} özetleniyor…");
+                var partial = await CompleteAsync(
+                    SummaryPrompt(doc.FileName, final: false),
+                    $"(Bölüm {i + 1}/{groups.Count})\n\n{groups[i]}",
+                    temperature: 0.3, maxTokens: 400, ct: ct);
+                partials.Add(partial);
+            }
+            finalInput = "Aşağıdaki bölüm özetlerini tek ve tutarlı bir özete dönüştür:\n\n" +
+                         string.Join("\n\n---\n\n", partials);
+        }
+
+        if (stage is not null)
+            await stage("Özet yazılıyor…");
+
+        var sb = new StringBuilder();
+        await foreach (var delta in CompleteStreamAsync(
+            SummaryPrompt(doc.FileName, final: true), finalInput,
+            temperature: 0.3, maxTokens: 800, ct: ct))
+        {
+            sb.Append(delta);
+            yield return delta;
+        }
+
+        await _db.SetSummaryAsync(documentId, sb.ToString().Trim());
     }
 
     private static string SummaryPrompt(string fileName, bool final) => final
