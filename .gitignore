@@ -1,0 +1,26 @@
+# Derleme çıktıları
+bin/
+obj/
+publish/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Yerel veri: SQLite veritabanı, yüklenen belgeler, üretilen raporlar
+data/
+src/FoundryRag.Api/data/
+
+# Claude Code yerel yapılandırması
+.claude/
+
+# İşletim sistemi
+Thumbs.db
+.DS_Store
+
+# Loglar
+*.log
+logs/
