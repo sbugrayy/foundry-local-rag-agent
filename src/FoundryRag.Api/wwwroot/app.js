@@ -11,6 +11,8 @@ const state = {
   docsTimer: null,
   lastStatus: null,
   docs: [],             // yüklü belgeler (mention menüsü + rapor kapsamı için)
+  docQuery: "",
+  docSort: "date-desc",
 };
 
 /* ---------- Yardımcılar ---------- */
@@ -396,14 +398,43 @@ function refreshScopeSelect() {
   if ([...select.options].some(o => o.value === current)) select.value = current;
 }
 
-async function loadDocuments() {
-  try {
-    const docs = await api("/documents");
-    state.docs = docs;
-    refreshScopeSelect();
-    const body = $("#docsBody");
-    $("#docsEmpty").style.display = docs.length === 0 ? "block" : "none";
-    body.innerHTML = docs.map(d => `
+function filterDocs(docs, query) {
+  const q = query.trim().toLocaleLowerCase("tr");
+  if (!q) return docs;
+  return docs.filter(d => d.fileName.toLocaleLowerCase("tr").includes(q));
+}
+
+function sortDocs(docs, sortKey) {
+  const arr = [...docs];
+  const byName = (a, b) => a.fileName.localeCompare(b.fileName, "tr");
+  switch (sortKey) {
+    case "date-asc": return arr.sort((a, b) => new Date(a.uploadedAtUtc) - new Date(b.uploadedAtUtc));
+    case "name-asc": return arr.sort(byName);
+    case "name-desc": return arr.sort((a, b) => byName(b, a));
+    case "size-desc": return arr.sort((a, b) => b.sizeBytes - a.sizeBytes);
+    case "size-asc": return arr.sort((a, b) => a.sizeBytes - b.sizeBytes);
+    case "status": return arr.sort((a, b) => (a.status || "").localeCompare(b.status || "", "tr"));
+    case "date-desc":
+    default: return arr.sort((a, b) => new Date(b.uploadedAtUtc) - new Date(a.uploadedAtUtc));
+  }
+}
+
+function renderDocsTable() {
+  const filtered = sortDocs(filterDocs(state.docs, state.docQuery), state.docSort);
+  const body = $("#docsBody");
+  const empty = $("#docsEmpty");
+
+  if (state.docs.length === 0) {
+    empty.textContent = "Henüz belge yok — yukarıdan yükleyebilirsin.";
+    empty.style.display = "block";
+  } else if (filtered.length === 0) {
+    empty.textContent = "Aramanla eşleşen belge yok.";
+    empty.style.display = "block";
+  } else {
+    empty.style.display = "none";
+  }
+
+  body.innerHTML = filtered.map(d => `
       <tr data-id="${d.id}">
         <td><div class="file-cell"><span class="file-ico">${fileIcons[d.extension] || "📄"}</span>${escapeHtml(d.fileName)}</div></td>
         <td>${formatSize(d.sizeBytes)}</td>
@@ -419,6 +450,14 @@ async function loadDocuments() {
       </tr>
       ${d.summary ? `<tr class="summary-row"><td colspan="6"><strong>Özet:</strong>\n${escapeHtml(d.summary)}</td></tr>` : ""}
     `).join("");
+}
+
+async function loadDocuments() {
+  try {
+    const docs = await api("/documents");
+    state.docs = docs;
+    refreshScopeSelect();
+    renderDocsTable();
 
     // İşlenen belge varsa yenilemeye devam et
     clearTimeout(state.docsTimer);
@@ -429,6 +468,15 @@ async function loadDocuments() {
     toast(`Belgeler yüklenemedi: ${err.message}`, "error");
   }
 }
+
+$("#docSearch").addEventListener("input", (e) => {
+  state.docQuery = e.target.value;
+  renderDocsTable();
+});
+$("#docSort").addEventListener("change", (e) => {
+  state.docSort = e.target.value;
+  renderDocsTable();
+});
 
 async function uploadFiles(files) {
   if (!files || files.length === 0) return;

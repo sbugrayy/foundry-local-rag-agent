@@ -90,6 +90,19 @@
           <div class="drop-hint">.docx · .pdf · .xlsx · .csv · .txt · .md</div>
         </div>
 
+        <div class="table-toolbar">
+          <input type="search" id="docSearch" class="search-input" placeholder="Dosya adına göre ara…">
+          <select id="docSort" class="scope-select" title="Sıralama">
+            <option value="date-desc">Yüklenme (yeni → eski)</option>
+            <option value="date-asc">Yüklenme (eski → yeni)</option>
+            <option value="name-asc">Ad (A → Z)</option>
+            <option value="name-desc">Ad (Z → A)</option>
+            <option value="size-desc">Boyut (büyük → küçük)</option>
+            <option value="size-asc">Boyut (küçük → büyük)</option>
+            <option value="status">Durum</option>
+          </select>
+        </div>
+
         <div class="table-wrap">
           <table class="data-table" id="docsTable">
             <thead>
