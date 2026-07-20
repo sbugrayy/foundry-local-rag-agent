@@ -103,10 +103,21 @@
           </select>
         </div>
 
+        <div class="bulk-bar" id="bulkBar" hidden>
+          <span id="bulkCount"></span>
+          <div class="bulk-actions">
+            <button class="btn btn-sm" id="bulkSummarize">Seçilenleri Özetle</button>
+            <button class="btn btn-sm btn-danger" id="bulkDelete">Seçilenleri Sil</button>
+          </div>
+        </div>
+
         <div class="table-wrap">
           <table class="data-table" id="docsTable">
             <thead>
-              <tr><th>Dosya</th><th>Boyut</th><th>Durum</th><th>Parça</th><th>Yüklenme</th><th></th></tr>
+              <tr>
+                <th class="checkbox-col"><input type="checkbox" id="docSelectAll" title="Tümünü seç"></th>
+                <th>Dosya</th><th>Boyut</th><th>Durum</th><th>Parça</th><th>Yüklenme</th><th></th>
+              </tr>
             </thead>
             <tbody id="docsBody"></tbody>
           </table>

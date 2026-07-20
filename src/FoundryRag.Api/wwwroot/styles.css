@@ -314,6 +314,21 @@ body {
 .search-input:focus { border-color: var(--accent); }
 .search-input::placeholder { color: var(--text-dim); }
 
+.bulk-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(109,141,255,.12), rgba(77,214,193,.08));
+  border: 1px solid rgba(109,141,255,.4);
+  border-radius: 11px;
+  padding: 10px 15px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+.bulk-bar[hidden] { display: none; }
+.bulk-actions { display: flex; gap: 8px; }
+.checkbox-col { width: 34px; text-align: center; }
+.checkbox-col input, .doc-checkbox { width: 15px; height: 15px; cursor: pointer; accent-color: var(--accent); }
+
 .table-wrap {
   background: var(--panel);
   border: 1px solid var(--border);

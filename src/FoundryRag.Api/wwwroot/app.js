@@ -13,6 +13,8 @@ const state = {
   docs: [],             // yüklü belgeler (mention menüsü + rapor kapsamı için)
   docQuery: "",
   docSort: "date-desc",
+  selectedDocIds: new Set(),
+  lastVisibleDocIds: [],
 };
 
 /* ---------- Yardımcılar ---------- */
@@ -419,10 +421,25 @@ function sortDocs(docs, sortKey) {
   }
 }
 
+function updateBulkBar(visibleIds) {
+  const count = state.selectedDocIds.size;
+  $("#bulkBar").hidden = count === 0;
+  $("#bulkCount").textContent = `${count} belge seçildi`;
+
+  const selectAll = $("#docSelectAll");
+  const visibleSelected = visibleIds.filter(id => state.selectedDocIds.has(id));
+  selectAll.checked = visibleIds.length > 0 && visibleSelected.length === visibleIds.length;
+  selectAll.indeterminate = visibleSelected.length > 0 && visibleSelected.length < visibleIds.length;
+}
+
 function renderDocsTable() {
   const filtered = sortDocs(filterDocs(state.docs, state.docQuery), state.docSort);
   const body = $("#docsBody");
   const empty = $("#docsEmpty");
+
+  // Artık listede olmayan belgelerin seçimini temizle (silinmiş vb.)
+  const liveIds = new Set(state.docs.map(d => d.id));
+  for (const id of state.selectedDocIds) if (!liveIds.has(id)) state.selectedDocIds.delete(id);
 
   if (state.docs.length === 0) {
     empty.textContent = "Henüz belge yok — yukarıdan yükleyebilirsin.";
@@ -436,6 +453,7 @@ function renderDocsTable() {
 
   body.innerHTML = filtered.map(d => `
       <tr data-id="${d.id}">
+        <td class="checkbox-col"><input type="checkbox" class="doc-checkbox" data-id="${d.id}" ${state.selectedDocIds.has(d.id) ? "checked" : ""}></td>
         <td><div class="file-cell"><span class="file-ico">${fileIcons[d.extension] || "📄"}</span>${escapeHtml(d.fileName)}</div></td>
         <td>${formatSize(d.sizeBytes)}</td>
         <td><span class="status-chip ${d.status}">${d.status === "processing" ? '<span class="spinner"></span>' : ""}${statusTr[d.status] || d.status}${d.error ? ` — ${escapeHtml(d.error)}` : ""}</span></td>
@@ -448,8 +466,19 @@ function renderDocsTable() {
           </div>
         </td>
       </tr>
-      ${d.summary ? `<tr class="summary-row"><td colspan="6"><strong>Özet:</strong>\n${escapeHtml(d.summary)}</td></tr>` : ""}
+      ${d.summary ? `<tr class="summary-row"><td colspan="7"><strong>Özet:</strong>\n${escapeHtml(d.summary)}</td></tr>` : ""}
     `).join("");
+
+  body.querySelectorAll(".doc-checkbox").forEach(cb => {
+    cb.addEventListener("change", () => {
+      const id = Number(cb.dataset.id);
+      if (cb.checked) state.selectedDocIds.add(id); else state.selectedDocIds.delete(id);
+      updateBulkBar(filtered.map(d => d.id));
+    });
+  });
+
+  state.lastVisibleDocIds = filtered.map(d => d.id);
+  updateBulkBar(state.lastVisibleDocIds);
 }
 
 async function loadDocuments() {
@@ -476,6 +505,51 @@ $("#docSearch").addEventListener("input", (e) => {
 $("#docSort").addEventListener("change", (e) => {
   state.docSort = e.target.value;
   renderDocsTable();
+});
+
+$("#docSelectAll").addEventListener("change", (e) => {
+  const visible = state.lastVisibleDocIds || [];
+  if (e.target.checked) visible.forEach(id => state.selectedDocIds.add(id));
+  else visible.forEach(id => state.selectedDocIds.delete(id));
+  renderDocsTable();
+});
+
+$("#bulkDelete").addEventListener("click", async () => {
+  const ids = [...state.selectedDocIds];
+  if (ids.length === 0) return;
+  if (!confirm(`${ids.length} belge ve tüm parçaları silinsin mi?`)) return;
+
+  const btn = $("#bulkDelete");
+  btn.disabled = true;
+  const results = await Promise.allSettled(ids.map(id => api(`/documents/${id}`, { method: "DELETE" })));
+  const failed = results.filter(r => r.status === "rejected").length;
+  const ok = results.length - failed;
+  if (ok > 0) toast(`${ok} belge silindi.`, "success");
+  if (failed > 0) toast(`${failed} belge silinemedi.`, "error");
+
+  state.selectedDocIds.clear();
+  btn.disabled = false;
+  loadDocuments();
+  refreshStatus();
+});
+
+$("#bulkSummarize").addEventListener("click", async () => {
+  const ids = [...state.selectedDocIds].filter(id => {
+    const doc = state.docs.find(d => d.id === id);
+    return doc && doc.status === "ready";
+  });
+  if (ids.length === 0) { toast("Seçili belgeler arasında özetlenebilir (hazır) belge yok.", "error"); return; }
+
+  const btn = $("#bulkSummarize");
+  btn.disabled = true;
+  const results = await Promise.allSettled(ids.map(id => api(`/documents/${id}/summarize`, { method: "POST" })));
+  const failed = results.filter(r => r.status === "rejected").length;
+  const ok = results.length - failed;
+  if (ok > 0) toast(`${ok} belge özetlendi.`, "success");
+  if (failed > 0) toast(`${failed} belge özetlenemedi.`, "error");
+
+  btn.disabled = false;
+  loadDocuments();
 });
 
 async function uploadFiles(files) {
