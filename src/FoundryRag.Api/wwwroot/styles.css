@@ -15,13 +15,32 @@
   --ok: #4dd68a;
   --radius: 14px;
   --shadow: 0 10px 30px rgba(0, 0, 0, .35);
+  --bg-glow: #1a2650;
+}
+
+[data-theme="light"] {
+  --bg: #f4f6fb;
+  --bg-soft: #eceff8;
+  --panel: #ffffff;
+  --panel-2: #eef1f8;
+  --border: #dde3f0;
+  --text: #1a2233;
+  --text-dim: #5b6578;
+  --accent: #4a63e0;
+  --accent-2: #0f9c8d;
+  --accent-grad: linear-gradient(135deg, #4a63e0 0%, #0f9c8d 100%);
+  --danger: #d63955;
+  --warn: #c97a12;
+  --ok: #1f9457;
+  --shadow: 0 10px 30px rgba(30, 41, 78, .08);
+  --bg-glow: #dbe3fb;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-  background: radial-gradient(1200px 600px at 80% -10%, #1a2650 0%, var(--bg) 55%);
+  background: radial-gradient(1200px 600px at 80% -10%, var(--bg-glow) 0%, var(--bg) 55%);
   color: var(--text);
   min-height: 100vh;
 }
@@ -99,6 +118,16 @@ body {
 .pill-dot.loading { animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
 .sidebar-note { font-size: 11px; color: var(--text-dim); text-align: center; opacity: .75; }
+
+.theme-toggle {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--panel); border: 1px solid var(--border);
+  color: var(--text-dim); border-radius: 999px;
+  padding: 8px 13px; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; font-family: inherit; transition: all .15s ease;
+  width: 100%;
+}
+.theme-toggle:hover { color: var(--text); border-color: var(--accent); }
 
 /* ---------- Ana bölüm ---------- */
 .main { flex: 1; padding: 30px 38px; max-width: 1180px; }

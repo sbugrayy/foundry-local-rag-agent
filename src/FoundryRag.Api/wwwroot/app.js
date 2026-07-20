@@ -118,6 +118,23 @@ $$(".nav-item").forEach(btn => {
   });
 });
 
+/* ---------- Tema ---------- */
+
+function applyTheme(theme) {
+  if (theme === "light") document.documentElement.setAttribute("data-theme", "light");
+  else document.documentElement.removeAttribute("data-theme");
+  $("#themeIcon").textContent = theme === "light" ? "☀️" : "🌙";
+  $("#themeLabel").textContent = theme === "light" ? "Açık tema" : "Koyu tema";
+}
+
+applyTheme(localStorage.getItem("theme") === "light" ? "light" : "dark");
+
+$("#themeToggle").addEventListener("click", () => {
+  const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+  localStorage.setItem("theme", next);
+  applyTheme(next);
+});
+
 /* ---------- Durum ---------- */
 
 async function refreshStatus() {

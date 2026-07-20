@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Foundry RAG Ajanı — Belge Zekâsı Paneli</title>
+  <script>
+    if (localStorage.getItem("theme") === "light") document.documentElement.setAttribute("data-theme", "light");
+  </script>
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
 </head>
@@ -41,6 +44,9 @@
           <span class="pill-dot loading" id="pillDot"></span>
           <span id="pillText">Model hazırlanıyor…</span>
         </div>
+        <button class="theme-toggle" id="themeToggle" title="Temayı değiştir">
+          <span id="themeIcon">🌙</span> <span id="themeLabel">Koyu tema</span>
+        </button>
         <div class="sidebar-note">%100 yerel — verileriniz cihazdan çıkmaz</div>
       </div>
     </aside>
