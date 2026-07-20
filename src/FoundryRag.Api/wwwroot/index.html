@@ -69,7 +69,8 @@
             </div>
           </div>
           <form class="chat-input" id="chatForm">
-            <textarea id="chatText" rows="1" placeholder="Belgelerin hakkında bir şey sor… (Enter: gönder, Shift+Enter: yeni satır)"></textarea>
+            <div class="mention-menu" id="mentionMenu" hidden></div>
+            <textarea id="chatText" rows="1" placeholder="Belgelerin hakkında bir şey sor… (@ ile belge seç; Enter: gönder)"></textarea>
             <button type="submit" class="btn btn-primary" id="chatSend">Gönder</button>
           </form>
         </div>
@@ -112,10 +113,15 @@
           <textarea id="reportInstruction" rows="3"
             placeholder="Örn: Yüklediğim satış verilerinden aylık performans raporu hazırla; öne çıkan ürünleri ve toplam ciroyu vurgula."></textarea>
           <div class="report-form-row">
-            <div class="segmented" id="formatSeg">
-              <button class="seg-item active" data-format="docx">📝 Word</button>
-              <button class="seg-item" data-format="xlsx">📊 Excel</button>
-              <button class="seg-item" data-format="pdf">📕 PDF</button>
+            <div class="report-form-left">
+              <div class="segmented" id="formatSeg">
+                <button class="seg-item active" data-format="docx">📝 Word</button>
+                <button class="seg-item" data-format="xlsx">📊 Excel</button>
+                <button class="seg-item" data-format="pdf">📕 PDF</button>
+              </div>
+              <select class="scope-select" id="reportScope" title="Raporun hangi belgelerden üretileceğini seçer">
+                <option value="">📚 Tüm belgeler</option>
+              </select>
             </div>
             <button class="btn btn-primary" id="reportCreate">Rapor Oluştur</button>
           </div>

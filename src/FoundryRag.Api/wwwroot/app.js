@@ -10,6 +10,7 @@ const state = {
   statusTimer: null,
   docsTimer: null,
   lastStatus: null,
+  docs: [],             // yüklü belgeler (mention menüsü + rapor kapsamı için)
 };
 
 /* ---------- Yardımcılar ---------- */
@@ -313,14 +314,63 @@ $("#chatForm").addEventListener("submit", (e) => {
 });
 
 chatText.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { hideMentionMenu(); return; }
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
+    hideMentionMenu();
     $("#chatForm").requestSubmit();
   }
 });
 chatText.addEventListener("input", () => {
   chatText.style.height = "auto";
   chatText.style.height = Math.min(chatText.scrollHeight, 140) + "px";
+  updateMentionMenu();
+});
+
+/* ---------- @Bahsetme menüsü ---------- */
+
+const mentionMenu = $("#mentionMenu");
+
+function hideMentionMenu() { mentionMenu.hidden = true; }
+
+/** İmleçten geriye doğru aktif "@token"ı bulur (boşluk görünce durur). */
+function activeMentionToken() {
+  const upToCaret = chatText.value.slice(0, chatText.selectionStart);
+  const match = upToCaret.match(/@([^\s@]*)$/);
+  return match ? { text: match[1], start: upToCaret.length - match[0].length } : null;
+}
+
+function updateMentionMenu() {
+  const token = activeMentionToken();
+  if (!token) { hideMentionMenu(); return; }
+
+  const query = token.text.toLocaleLowerCase("tr");
+  const matches = state.docs.filter(d =>
+    d.status === "ready" && d.fileName.toLocaleLowerCase("tr").includes(query));
+  if (matches.length === 0) { hideMentionMenu(); return; }
+
+  mentionMenu.innerHTML = matches
+    .map(d => `<button type="button" class="mention-item" data-name="${escapeHtml(d.fileName)}">📄 ${escapeHtml(d.fileName)}</button>`)
+    .join("");
+  mentionMenu.hidden = false;
+
+  mentionMenu.querySelectorAll(".mention-item").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const t = activeMentionToken();
+      if (!t) { hideMentionMenu(); return; }
+      const before = chatText.value.slice(0, t.start);
+      const after = chatText.value.slice(chatText.selectionStart);
+      chatText.value = `${before}@${btn.dataset.name} ${after}`;
+      hideMentionMenu();
+      chatText.focus();
+      const caret = (before + "@" + btn.dataset.name + " ").length;
+      chatText.setSelectionRange(caret, caret);
+    });
+  });
+}
+
+document.addEventListener("click", (e) => {
+  if (!mentionMenu.contains(e.target) && e.target !== chatText) hideMentionMenu();
 });
 
 $$(".chip").forEach(chip => {
@@ -335,9 +385,22 @@ $$(".chip").forEach(chip => {
 const fileIcons = { ".docx": "📝", ".pdf": "📕", ".xlsx": "📊", ".csv": "📈", ".txt": "📃", ".md": "📃" };
 const statusTr = { ready: "hazır", processing: "işleniyor", queued: "kuyrukta", error: "hata" };
 
+function refreshScopeSelect() {
+  const select = $("#reportScope");
+  const current = select.value;
+  select.innerHTML = '<option value="">📚 Tüm belgeler</option>' +
+    state.docs
+      .filter(d => d.status === "ready")
+      .map(d => `<option value="${d.id}">📄 ${escapeHtml(d.fileName)}</option>`)
+      .join("");
+  if ([...select.options].some(o => o.value === current)) select.value = current;
+}
+
 async function loadDocuments() {
   try {
     const docs = await api("/documents");
+    state.docs = docs;
+    refreshScopeSelect();
     const body = $("#docsBody");
     $("#docsEmpty").style.display = docs.length === 0 ? "block" : "none";
     body.innerHTML = docs.map(d => `
@@ -472,9 +535,14 @@ $("#reportCreate").addEventListener("click", async () => {
   $("#reportCreate").disabled = true;
   $("#reportProgress").hidden = false;
   try {
+    const scopeValue = $("#reportScope").value;
     await api("/reports", {
       method: "POST",
-      body: JSON.stringify({ instruction, format: state.reportFormat }),
+      body: JSON.stringify({
+        instruction,
+        format: state.reportFormat,
+        documentId: scopeValue ? Number(scopeValue) : null,
+      }),
     });
     toast("Rapor oluşturuldu! 🎉", "success");
     $("#reportInstruction").value = "";

@@ -23,6 +23,8 @@ public sealed class RagService
     private readonly VectorStore _db;
     private readonly int _topK;
     private readonly int _maxContextChars;
+    private readonly double _minScore;
+    private readonly double _relativeFloor;
     private readonly object _kernelLock = new();
     private Kernel? _kernel;
 
@@ -33,6 +35,8 @@ public sealed class RagService
         _db = db;
         _topK = cfg.GetValue("Rag:TopK", 5);
         _maxContextChars = cfg.GetValue("Rag:MaxContextChars", 6500);
+        _minScore = cfg.GetValue("Rag:MinScore", 0.25);
+        _relativeFloor = cfg.GetValue("Rag:RelativeScoreFloor", 0.72);
     }
 
     public bool IsReady => _foundry.IsReady;
@@ -132,14 +136,17 @@ public sealed class RagService
     /// RAG hazırlığı: sorguyu embed et → en ilgili parçaları bul → sistem istemi ve
     /// kaynak listesini üret. Hem akışlı hem akışsız cevap yolu bunu kullanır.
     /// </summary>
-    public async Task<RagContext> PrepareAnswerAsync(string question, CancellationToken ct = default)
+    public async Task<RagContext> PrepareAnswerAsync(
+        string question,
+        IReadOnlyCollection<long>? documentIds = null,
+        CancellationToken ct = default)
     {
         var (_, chunkCount) = await _db.GetCountsAsync();
         if (chunkCount == 0)
             return new RagContext(false, "", []);
 
         var queryVector = await _embeddings.EmbedOneAsync(question, ct);
-        var hits = await _db.SearchAsync(queryVector, _topK);
+        var hits = ApplyScoreThreshold(await _db.SearchAsync(queryVector, _topK, documentIds));
 
         var context = BuildContext(hits);
         var systemPrompt = $"""
@@ -168,9 +175,10 @@ public sealed class RagService
     public async Task<(string Answer, List<SourceRef> Sources)> AnswerAsync(
         string question,
         List<ChatTurn>? history,
+        IReadOnlyCollection<long>? documentIds = null,
         CancellationToken ct = default)
     {
-        var ragContext = await PrepareAnswerAsync(question, ct);
+        var ragContext = await PrepareAnswerAsync(question, documentIds, ct);
         if (!ragContext.HasChunks)
             return (NoDocsAnswer, []);
 
@@ -181,11 +189,27 @@ public sealed class RagService
 
     /// <summary>Konuya göre bağlam toplar (rapor üretimi için, sohbetten daha geniş).</summary>
     public async Task<(string Context, List<SearchHit> Hits)> CollectContextAsync(
-        string topic, int multiplier = 2, CancellationToken ct = default)
+        string topic,
+        int multiplier = 2,
+        IReadOnlyCollection<long>? documentIds = null,
+        CancellationToken ct = default)
     {
         var queryVector = await _embeddings.EmbedOneAsync(topic, ct);
-        var hits = await _db.SearchAsync(queryVector, _topK * multiplier);
+        var hits = ApplyScoreThreshold(await _db.SearchAsync(queryVector, _topK * multiplier, documentIds));
         return (BuildContext(hits, _maxContextChars * 2), hits);
+    }
+
+    /// <summary>
+    /// Alakasız parçaları eler: en iyi skorun belirli oranının (ve mutlak tabanın)
+    /// altında kalan parçalar bağlama giremez. Küçük külliyatlarda başka belgelerin
+    /// konuyla ilgisiz parçalarının rapora sızmasını engeller.
+    /// </summary>
+    private List<SearchHit> ApplyScoreThreshold(List<SearchHit> hits)
+    {
+        if (hits.Count == 0) return hits;
+        var floor = Math.Max(_minScore, hits[0].Score * _relativeFloor);
+        var kept = hits.Where(h => h.Score >= floor).ToList();
+        return kept.Count > 0 ? kept : [hits[0]];
     }
 
     /// <summary>Belgeyi özetler; uzun belgelerde map-reduce (parça özetleri → birleşik özet).</summary>

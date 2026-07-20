@@ -235,16 +235,35 @@ public sealed class VectorStore
         return list;
     }
 
-    /// <summary>Sorgu vektörüne en yakın parçaları döndürür (vektörler normalize → dot = cosine).</summary>
-    public async Task<List<SearchHit>> SearchAsync(float[] queryVector, int topK)
+    /// <summary>
+    /// Sorgu vektörüne en yakın parçaları döndürür (vektörler normalize → dot = cosine).
+    /// <paramref name="documentIds"/> verilirse arama yalnızca o belgelere kapsamlanır.
+    /// </summary>
+    public async Task<List<SearchHit>> SearchAsync(
+        float[] queryVector, int topK, IReadOnlyCollection<long>? documentIds = null)
     {
         using var conn = Open();
         var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+
+        var scopeFilter = "";
+        if (documentIds is { Count: > 0 })
+        {
+            var paramNames = new List<string>();
+            var i = 0;
+            foreach (var id in documentIds)
+            {
+                var name = $"$doc{i++}";
+                paramNames.Add(name);
+                cmd.Parameters.AddWithValue(name, id);
+            }
+            scopeFilter = $" AND c.document_id IN ({string.Join(", ", paramNames)})";
+        }
+
+        cmd.CommandText = $"""
             SELECT c.id, c.document_id, d.file_name, c.chunk_index, c.text, c.embedding
             FROM chunks c
             JOIN documents d ON d.id = c.document_id
-            WHERE d.status = 'ready';
+            WHERE d.status = 'ready'{scopeFilter};
             """;
         var hits = new List<SearchHit>();
         using var reader = await cmd.ExecuteReaderAsync();

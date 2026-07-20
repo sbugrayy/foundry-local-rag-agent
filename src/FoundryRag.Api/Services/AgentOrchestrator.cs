@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using FoundryRag.Api.Models;
 
 namespace FoundryRag.Api.Services;
@@ -38,7 +39,15 @@ public sealed class AgentOrchestrator
                 [], "not_ready");
         }
 
+        var (mentionIds, mentionNames) = await ResolveMentionsAsync(request.Message);
+        IReadOnlyCollection<long>? scope = mentionIds.Count > 0 ? mentionIds : null;
+        if (scope is not null)
+            _logger.LogInformation("@Bahsetme kapsamı: {Names}", string.Join(", ", mentionNames));
+
         var route = await RouteAsync(request.Message, ct);
+        // @Bahsetme belge kapsamı demektir — kullanıcı belge listesi istemiyordur
+        if (scope is not null && route.Action == "list_docs")
+            route = route with { Action = "chat" };
         _logger.LogInformation("Ajan yönlendirmesi: {Action} (belge: {Doc}, format: {Fmt})",
             route.Action, route.Document, route.Format);
 
@@ -46,10 +55,10 @@ public sealed class AgentOrchestrator
         {
             return route.Action switch
             {
-                "summarize" => await HandleSummarizeAsync(route, request, ct),
-                "report" => await HandleReportAsync(route, request, ct),
+                "summarize" => await HandleSummarizeAsync(route, request, mentionIds, ct),
+                "report" => await HandleReportAsync(route, request, scope, ct),
                 "list_docs" => await HandleListDocsAsync(),
-                _ => await HandleChatAsync(request, ct)
+                _ => await HandleChatAsync(request, scope, ct)
             };
         }
         catch (Exception ex)
@@ -79,14 +88,31 @@ public sealed class AgentOrchestrator
                 return;
             }
 
+            var (mentionIds, mentionNames) = await ResolveMentionsAsync(request.Message);
+            IReadOnlyCollection<long>? scope = mentionIds.Count > 0 ? mentionIds : null;
+            if (scope is not null)
+            {
+                await emit(new
+                {
+                    type = "status",
+                    stage = "scoping",
+                    message = $"Kapsam: {string.Join(", ", mentionNames)}"
+                });
+            }
+
             await emit(new { type = "status", stage = "routing", message = "Ajan uygun aracı seçiyor…" });
             var route = await RouteAsync(request.Message, ct);
-            _logger.LogInformation("Ajan yönlendirmesi (akış): {Action} (belge: {Doc}, format: {Fmt})",
-                route.Action, route.Document, route.Format);
+            // @Bahsetme belge kapsamı demektir — kullanıcı belge listesi istemiyordur
+            if (scope is not null && route.Action == "list_docs")
+                route = route with { Action = "chat" };
+            _logger.LogInformation("Ajan yönlendirmesi (akış): {Action} (belge: {Doc}, format: {Fmt}, kapsam: {Scope})",
+                route.Action, route.Document, route.Format, scope is null ? "tümü" : string.Join(",", scope));
 
             if (route.Action == "summarize")
             {
-                var doc = await ResolveDocumentAsync(route.Document);
+                var doc = mentionIds.Count > 0
+                    ? await _db.GetDocumentAsync(mentionIds[0])
+                    : await ResolveDocumentAsync(route.Document);
                 if (doc is not null)
                 {
                     await emit(new
@@ -118,7 +144,14 @@ public sealed class AgentOrchestrator
                     message = $"Belgelerden bağlam toplanıyor ve {formatName} raporu yazılıyor — bu bir dakikayı bulabilir…"
                 });
 
-                var (report, sources) = await GenerateReportAsync(request.Message, format, route.Topic, ct);
+                if (scope is null)
+                {
+                    var routeDoc = await ResolveDocumentAsync(route.Document);
+                    if (routeDoc is not null && !string.IsNullOrWhiteSpace(route.Document))
+                        scope = [routeDoc.Id];
+                }
+
+                var (report, sources) = await GenerateReportAsync(request.Message, format, route.Topic, scope, ct);
                 await emit(new { type = "sources", sources });
                 await emit(new { type = "report", report });
                 await emit(new
@@ -140,7 +173,7 @@ public sealed class AgentOrchestrator
 
             // Varsayılan: RAG soru-cevap akışı (çözülemeyen summarize da buraya düşer)
             await emit(new { type = "status", stage = "searching", message = "Belgelerde aranıyor…" });
-            var ragContext = await _rag.PrepareAnswerAsync(request.Message, ct);
+            var ragContext = await _rag.PrepareAnswerAsync(request.Message, scope, ct);
             if (!ragContext.HasChunks)
             {
                 await emit(new { type = "delta", text = RagService.NoDocsAnswer });
@@ -167,6 +200,39 @@ public sealed class AgentOrchestrator
             _logger.LogError(ex, "Akışlı ajan eylemi başarısız");
             await emit(new { type = "error", message = $"İşlem sırasında hata oluştu: {ex.Message}" });
         }
+    }
+
+    // ---------- @Bahsetme (belge kapsamı) ----------
+
+    /// <summary>
+    /// Mesajdaki @dosyaadi bahsetmelerini yüklü belgelere çözer. Bahsetme varsa
+    /// vektör araması yalnızca o belgelere kapsamlanır — küçük külliyatlarda
+    /// alakasız belgelerin bağlama sızmasını kesin olarak engeller.
+    /// </summary>
+    private async Task<(List<long> Ids, List<string> Names)> ResolveMentionsAsync(string message)
+    {
+        var ids = new List<long>();
+        var names = new List<string>();
+        if (!message.Contains('@')) return (ids, names);
+
+        var docs = await _db.ListDocumentsAsync();
+        foreach (Match match in Regex.Matches(message, @"@([^\s@,;!?]+)"))
+        {
+            var token = match.Groups[1].Value.Trim('"', '\'', '.', ')', '(');
+            if (token.Length < 2) continue;
+
+            var doc = docs.FirstOrDefault(d => d.FileName.Equals(token, StringComparison.OrdinalIgnoreCase))
+                ?? docs.FirstOrDefault(d => d.FileName.Contains(token, StringComparison.OrdinalIgnoreCase))
+                ?? docs.FirstOrDefault(d =>
+                    Path.GetFileNameWithoutExtension(d.FileName).Contains(token, StringComparison.OrdinalIgnoreCase));
+
+            if (doc is not null && !ids.Contains(doc.Id))
+            {
+                ids.Add(doc.Id);
+                names.Add(doc.FileName);
+            }
+        }
+        return (ids, names);
     }
 
     // ---------- Yönlendirme ----------
@@ -196,8 +262,11 @@ public sealed class AgentOrchestrator
             format kuralı (sadece report için): "Word" → docx, "Excel" → xlsx, "PDF" → pdf, belirtilmemişse docx.
             document alanı yüklü belgelerden birebir seçilmeli. Yüklü belgeler: {{docList}}
 
+            Mesajdaki "@dosyaadi" ifadesi belge KAPSAMI seçer; bu list_docs anlamına GELMEZ, soruyu normal işle.
+
             Örnekler:
             Kullanıcı: "toplam ciro ne kadar ve en güçlü çeyrek hangisi?" → {"action":"chat","document":null,"format":null,"topic":null}
+            Kullanıcı: "@proje.pdf veri setleri hangileri?" → {"action":"chat","document":null,"format":null,"topic":null}
             Kullanıcı: "projenin riskleri neler?" → {"action":"chat","document":null,"format":null,"topic":null}
             Kullanıcı: "satış raporunu özetler misin" → {"action":"summarize","document":"satis-raporu.pdf","format":null,"topic":null}
             Kullanıcı: "2025 gelirleri hakkında Excel raporu hazırla" → {"action":"report","document":null,"format":"xlsx","topic":"2025 gelirleri"}
@@ -242,19 +311,24 @@ public sealed class AgentOrchestrator
 
     // ---------- Eylemler ----------
 
-    private async Task<ChatResponse> HandleChatAsync(ChatRequest request, CancellationToken ct)
+    private async Task<ChatResponse> HandleChatAsync(
+        ChatRequest request, IReadOnlyCollection<long>? scope, CancellationToken ct)
     {
-        var (answer, sources) = await _rag.AnswerAsync(request.Message, request.History, ct);
+        var (answer, sources) = await _rag.AnswerAsync(request.Message, request.History, scope, ct);
         return new ChatResponse(answer, sources, "chat");
     }
 
-    private async Task<ChatResponse> HandleSummarizeAsync(Route route, ChatRequest request, CancellationToken ct)
+    private async Task<ChatResponse> HandleSummarizeAsync(
+        Route route, ChatRequest request, List<long> mentionIds, CancellationToken ct)
     {
-        var doc = await ResolveDocumentAsync(route.Document);
+        // @Bahsetme varsa router'ın tahmininden daha güvenilirdir
+        var doc = mentionIds.Count > 0
+            ? await _db.GetDocumentAsync(mentionIds[0])
+            : await ResolveDocumentAsync(route.Document);
         if (doc is null)
         {
             // Belge çözülemedi → normal RAG cevabına düş
-            return await HandleChatAsync(request, ct);
+            return await HandleChatAsync(request, mentionIds.Count > 0 ? mentionIds : null, ct);
         }
 
         var summary = await _rag.SummarizeDocumentAsync(doc.Id, ct);
@@ -264,12 +338,21 @@ public sealed class AgentOrchestrator
             "summarize");
     }
 
-    private async Task<ChatResponse> HandleReportAsync(Route route, ChatRequest request, CancellationToken ct)
+    private async Task<ChatResponse> HandleReportAsync(
+        Route route, ChatRequest request, IReadOnlyCollection<long>? scope, CancellationToken ct)
     {
         var format = route.Format is "docx" or "xlsx" or "pdf" ? route.Format : "docx";
         var topic = string.IsNullOrWhiteSpace(route.Topic) ? request.Message : route.Topic;
 
-        var (report, sources) = await GenerateReportAsync(request.Message, format, topic, ct);
+        // Kapsam önceliği: @bahsetme → router'ın çözdüğü belge → tüm belgeler
+        if (scope is null)
+        {
+            var routeDoc = await ResolveDocumentAsync(route.Document);
+            if (routeDoc is not null && !string.IsNullOrWhiteSpace(route.Document))
+                scope = [routeDoc.Id];
+        }
+
+        var (report, sources) = await GenerateReportAsync(request.Message, format, topic, scope, ct);
 
         var formatName = format switch { "xlsx" => "Excel", "pdf" => "PDF", _ => "Word" };
         return new ChatResponse(
@@ -294,7 +377,8 @@ public sealed class AgentOrchestrator
     // ---------- Rapor üretimi (API'den doğrudan da çağrılır) ----------
 
     public async Task<(ReportInfo Report, List<SourceRef> Sources)> GenerateReportAsync(
-        string instruction, string format, string? topic = null, CancellationToken ct = default)
+        string instruction, string format, string? topic = null,
+        IReadOnlyCollection<long>? documentIds = null, CancellationToken ct = default)
     {
         if (!_rag.IsReady)
             throw new InvalidOperationException("Yerel model henüz hazır değil.");
@@ -304,7 +388,7 @@ public sealed class AgentOrchestrator
             throw new InvalidOperationException("Rapor üretmek için önce belge yüklemelisin.");
 
         var searchTopic = string.IsNullOrWhiteSpace(topic) ? instruction : topic;
-        var (context, hits) = await _rag.CollectContextAsync(searchTopic, multiplier: 2, ct);
+        var (context, hits) = await _rag.CollectContextAsync(searchTopic, multiplier: 2, documentIds, ct);
 
         ReportInfo report;
         if (format == "xlsx")
