@@ -15,9 +15,9 @@ Düşük efor, gözle görülür fayda. Devam eden tasarım yenileme işiyle ayn
 
 | # | Madde | Ne / Neden | Kapsam | Efor |
 |---|-------|-----------|--------|------|
-| 1.1 | ⬜ Belgeler tablosunda arama/filtre/sıralama | Belge sayısı arttıkça düz liste kullanışsız kalıyor; dosya adına göre anlık filtre + Durum/Boyut/Tarih'e göre sıralama | `wwwroot/app.js` (`loadDocuments`), `index.html` (tablo başlığı üzerine arama kutusu) — backend değişmez, filtre client-side | S |
-| 1.2 | ⬜ Belgeler'de toplu işlem | Şu an satır başına tek tek sil/özetle var; checkbox ile çoklu seçip toplu sil (ve mümkünse toplu özetle) | `index.html`/`app.js` (checkbox kolonu + toplu aksiyon çubuğu), backend'de mevcut `DELETE /api/documents/{id}` döngüyle çağrılabilir, gerekirse `POST /api/documents/bulk-delete` eklenir | M |
-| 1.3 | ⬜ Açık/koyu tema geçişi | Tasarım yenilemesiyle doğal olarak örtüşüyor; `styles.css` zaten CSS custom property (`:root`) tabanlı, ikinci bir `[data-theme="light"]` token seti + sidebar'a toggle eklemek yeterli | `styles.css`, `index.html` (toggle butonu), `app.js` (localStorage'da tercih saklama) | S |
+| 1.1 | ✅ Belgeler tablosunda arama/filtre/sıralama | Belge sayısı arttıkça düz liste kullanışsız kalıyor; dosya adına göre anlık filtre + Durum/Boyut/Tarih'e göre sıralama | `wwwroot/app.js` (`loadDocuments`), `index.html` (tablo başlığı üzerine arama kutusu) — backend değişmez, filtre client-side | S |
+| 1.2 | ✅ Belgeler'de toplu işlem | Şu an satır başına tek tek sil/özetle var; checkbox ile çoklu seçip toplu sil (ve mümkünse toplu özetle) | `index.html`/`app.js` (checkbox kolonu + toplu aksiyon çubuğu), mevcut `DELETE /api/documents/{id}` ve `POST /api/documents/{id}/summarize` `Promise.allSettled` ile paralel çağrılıyor — backend'e dokunulmadı | M |
+| 1.3 | ✅ Açık/koyu tema geçişi | Tasarım yenilemesiyle doğal olarak örtüşüyor; `styles.css` zaten CSS custom property (`:root`) tabanlı, ikinci bir `[data-theme="light"]` token seti + sidebar'a toggle eklemek yeterli | `styles.css`, `index.html` (toggle butonu + FOUC-önleyici inline script), `app.js` (localStorage'da tercih saklama) | S |
 
 ## Faz 2 — Ürün Derinliği
 

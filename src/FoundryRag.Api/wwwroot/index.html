@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Foundry RAG Ajanı — Belge Zekâsı Paneli</title>
+  <script>
+    if (localStorage.getItem("theme") === "light") document.documentElement.setAttribute("data-theme", "light");
+  </script>
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
 </head>
@@ -41,6 +44,9 @@
           <span class="pill-dot loading" id="pillDot"></span>
           <span id="pillText">Model hazırlanıyor…</span>
         </div>
+        <button class="theme-toggle" id="themeToggle" title="Temayı değiştir">
+          <span id="themeIcon">🌙</span> <span id="themeLabel">Koyu tema</span>
+        </button>
         <div class="sidebar-note">%100 yerel — verileriniz cihazdan çıkmaz</div>
       </div>
     </aside>
@@ -90,10 +96,34 @@
           <div class="drop-hint">.docx · .pdf · .xlsx · .csv · .txt · .md</div>
         </div>
 
+        <div class="table-toolbar">
+          <input type="search" id="docSearch" class="search-input" placeholder="Dosya adına göre ara…">
+          <select id="docSort" class="scope-select" title="Sıralama">
+            <option value="date-desc">Yüklenme (yeni → eski)</option>
+            <option value="date-asc">Yüklenme (eski → yeni)</option>
+            <option value="name-asc">Ad (A → Z)</option>
+            <option value="name-desc">Ad (Z → A)</option>
+            <option value="size-desc">Boyut (büyük → küçük)</option>
+            <option value="size-asc">Boyut (küçük → büyük)</option>
+            <option value="status">Durum</option>
+          </select>
+        </div>
+
+        <div class="bulk-bar" id="bulkBar" hidden>
+          <span id="bulkCount"></span>
+          <div class="bulk-actions">
+            <button class="btn btn-sm" id="bulkSummarize">Seçilenleri Özetle</button>
+            <button class="btn btn-sm btn-danger" id="bulkDelete">Seçilenleri Sil</button>
+          </div>
+        </div>
+
         <div class="table-wrap">
           <table class="data-table" id="docsTable">
             <thead>
-              <tr><th>Dosya</th><th>Boyut</th><th>Durum</th><th>Parça</th><th>Yüklenme</th><th></th></tr>
+              <tr>
+                <th class="checkbox-col"><input type="checkbox" id="docSelectAll" title="Tümünü seç"></th>
+                <th>Dosya</th><th>Boyut</th><th>Durum</th><th>Parça</th><th>Yüklenme</th><th></th>
+              </tr>
             </thead>
             <tbody id="docsBody"></tbody>
           </table>

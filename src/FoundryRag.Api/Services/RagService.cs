@@ -25,6 +25,7 @@ public sealed class RagService
     private readonly int _maxContextChars;
     private readonly double _minScore;
     private readonly double _relativeFloor;
+    private readonly int _modelContextTokens;
     private readonly object _kernelLock = new();
     private Kernel? _kernel;
 
@@ -37,6 +38,7 @@ public sealed class RagService
         _maxContextChars = cfg.GetValue("Rag:MaxContextChars", 6500);
         _minScore = cfg.GetValue("Rag:MinScore", 0.25);
         _relativeFloor = cfg.GetValue("Rag:RelativeScoreFloor", 0.72);
+        _modelContextTokens = cfg.GetValue("Rag:ModelContextTokens", 4096);
     }
 
     public bool IsReady => _foundry.IsReady;
@@ -187,16 +189,36 @@ public sealed class RagService
         return (answer, ragContext.Sources);
     }
 
-    /// <summary>Konuya göre bağlam toplar (rapor üretimi için, sohbetten daha geniş).</summary>
+    /// <summary>
+    /// Konuya göre bağlam toplar (rapor üretimi için, sohbetten daha geniş şekilde aday parça
+    /// arar). Bağlam karakter bütçesi, modelin toplam bağlam penceresini aşmayacak şekilde
+    /// <paramref name="reserveOutputTokens"/> baz alınarak dinamik hesaplanır — sabit bir çarpan
+    /// kullanılmaz, aksi halde çıktı için ayrılan token'larla toplamda modelin sınırını aşabilir.
+    /// </summary>
     public async Task<(string Context, List<SearchHit> Hits)> CollectContextAsync(
         string topic,
         int multiplier = 2,
         IReadOnlyCollection<long>? documentIds = null,
+        int reserveOutputTokens = 1600,
         CancellationToken ct = default)
     {
         var queryVector = await _embeddings.EmbedOneAsync(topic, ct);
         var hits = ApplyScoreThreshold(await _db.SearchAsync(queryVector, _topK * multiplier, documentIds));
-        return (BuildContext(hits, _maxContextChars * 2), hits);
+        return (BuildContext(hits, SafeContextCharsBudget(reserveOutputTokens)), hits);
+    }
+
+    /// <summary>
+    /// Bağlam bütçesini (karakter) modelin toplam bağlam penceresinden çıktı için ayrılan
+    /// token'ları ve sabit bir ek yükü (sistem istemi şablonu, talimat, güvenlik payı) düşerek
+    /// hesaplar. Türkçe metin için muhafazakâr bir karakter/token oranı (3.0) kullanılır —
+    /// sondan eklemeli yapı nedeniyle İngilizce'ye göre genelde daha fazla token'a bölünür.
+    /// </summary>
+    private int SafeContextCharsBudget(int reserveOutputTokens)
+    {
+        const double charsPerToken = 3.0;
+        const int overheadTokens = 350;
+        var availableTokens = Math.Max(400, _modelContextTokens - reserveOutputTokens - overheadTokens);
+        return (int)(availableTokens * charsPerToken);
     }
 
     /// <summary>

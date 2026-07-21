@@ -16,6 +16,10 @@ namespace FoundryRag.Api.Services;
 /// </summary>
 public sealed class AgentOrchestrator
 {
+    /// <summary>Rapor içeriği (docx/xlsx) üretiminde çıktı için ayrılan token sınırı.
+    /// Bağlam bütçesi de (RagService.CollectContextAsync) bununla tutarlı hesaplanır.</summary>
+    private const int ReportMaxTokens = 1600;
+
     private readonly RagService _rag;
     private readonly VectorStore _db;
     private readonly ReportService _reports;
@@ -388,7 +392,8 @@ public sealed class AgentOrchestrator
             throw new InvalidOperationException("Rapor üretmek için önce belge yüklemelisin.");
 
         var searchTopic = string.IsNullOrWhiteSpace(topic) ? instruction : topic;
-        var (context, hits) = await _rag.CollectContextAsync(searchTopic, multiplier: 2, documentIds, ct);
+        var (context, hits) = await _rag.CollectContextAsync(
+            searchTopic, multiplier: 2, documentIds: documentIds, reserveOutputTokens: ReportMaxTokens, ct: ct);
 
         ReportInfo report;
         if (format == "xlsx")
@@ -411,7 +416,7 @@ public sealed class AgentOrchestrator
                 BAĞLAM:
                 {context}
                 """,
-                instruction, temperature: 0.3, maxTokens: 1600, ct: ct);
+                instruction, temperature: 0.3, maxTokens: ReportMaxTokens, ct: ct);
 
             var title = ExtractTitle(markdown, instruction);
             report = await _reports.CreateFromMarkdownAsync(title, markdown, format, instruction);
@@ -442,7 +447,7 @@ public sealed class AgentOrchestrator
             BAĞLAM:
             {{context}}
             """,
-            instruction, temperature: 0.1, maxTokens: 1600, ct: ct);
+            instruction, temperature: 0.1, maxTokens: ReportMaxTokens, ct: ct);
 
         var (title, tables) = ParseExcelSpec(raw, instruction);
         return await _reports.CreateXlsxAsync(title, tables, instruction);
