@@ -107,5 +107,3 @@ doğru görünsün.
 
 - [x] Sohbet geçmişinin SQLite'ta kalıcılaştırılması (`chat_messages` tablosu)
 - [ ] Var olan Word/Excel dosyasında yerinde düzenleme
-- [ ] Native function calling'e geçiş (Foundry Local model desteği yaygınlaşınca)
-- [ ] `sqlite-vec` eklentisiyle ANN indeksleme

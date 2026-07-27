@@ -123,8 +123,6 @@ src/FoundryRag.Api/
 - [x] Streaming cevaplar (SSE) — sohbet, özet ve rapor akışı kelime kelime / durum olaylarıyla
 - [x] Sohbet geçmişinin SQLite'ta kalıcılaştırılması
 - [ ] Var olan Word/Excel dosyasında yerinde düzenleme
-- [ ] Native function calling'e geçiş (Foundry Local model desteği yaygınlaşınca)
-- [ ] `sqlite-vec` eklentisiyle ANN indeksleme (çok büyük arşivler için)
 
 ## Lisans
 
