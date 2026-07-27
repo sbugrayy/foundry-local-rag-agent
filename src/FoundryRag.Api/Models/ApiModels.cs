@@ -33,6 +33,15 @@ public record DocumentDto(
     string? Error,
     string? Summary);
 
+/// <summary>Kalıcı sohbet mesajı (SQLite). Role: "user" | "assistant".</summary>
+public record ChatMessageDto(
+    long Id,
+    string Role,
+    string Content,
+    List<SourceRef>? Sources,
+    ReportInfo? Report,
+    DateTime CreatedAtUtc);
+
 /// <summary>Üretilmiş rapor kaydı.</summary>
 public record ReportInfo(
     long Id,

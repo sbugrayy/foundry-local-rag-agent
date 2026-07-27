@@ -17,7 +17,8 @@
 | 📊 **Rapor üretimi** | "Satış verilerinden aylık rapor hazırla" de; ajan **Word / Excel / PDF** dosyası üretir |
 | 🤖 **Agentic yönlendirme** | Ajan, mesajına göre doğru aracı seçer: arama, özetleme, rapor üretme, listeleme |
 | 🎯 **Belge kapsamı (@bahsetme)** | Sohbette `@dosyaadi` yaz (menü açılır) ya da rapor formunda belge seç — arama yalnızca o belgeye kapsamlanır; ayrıca benzerlik eşiği alakasız belgelerin bağlama sızmasını engeller |
-| 🖥️ **Yönetim paneli** | Türkçe, koyu temalı web arayüzü: belgeler, sohbet, raporlar, sistem durumu |
+| 💾 **Kalıcı sohbet geçmişi** | Mesajlar kaynak ve rapor bağlarıyla SQLite'a yazılır; sayfa yenilense ya da uygulama yeniden başlasa da konuşma kaldığı yerden görünür |
+| 🖥️ **Yönetim paneli** | Türkçe web arayüzü (açık/koyu tema): belgeler, sohbet, raporlar, sistem durumu |
 
 ## Mimari
 
@@ -92,6 +93,8 @@ bileşenlerini ve modelleri (`phi-4-mini` ≈ 3,5 GB + `qwen3-embedding-0.6b` �
 | POST | `/api/documents/{id}/summarize` | Belgeyi özetle |
 | POST | `/api/chat` | Agentic sohbet (akışsız) — `{message, history}` |
 | POST | `/api/chat/stream` | **SSE akışlı** agentic sohbet — olaylar: `status` / `sources` / `delta` / `report` / `done` / `error` |
+| GET | `/api/chat/history` | Kalıcı sohbet geçmişi (kaynak + rapor bağlarıyla) |
+| DELETE | `/api/chat/history` | Sohbet geçmişini temizle |
 | GET | `/api/reports` | Rapor listesi |
 | POST | `/api/reports` | Rapor üret — `{instruction, format: docx\|xlsx\|pdf, documentId?: number}` (documentId verilirse yalnız o belgeden) |
 | GET | `/api/reports/{id}/download` | Raporu indir |
@@ -118,10 +121,8 @@ src/FoundryRag.Api/
 ## Yol Haritası
 
 - [x] Streaming cevaplar (SSE) — sohbet, özet ve rapor akışı kelime kelime / durum olaylarıyla
+- [x] Sohbet geçmişinin SQLite'ta kalıcılaştırılması
 - [ ] Var olan Word/Excel dosyasında yerinde düzenleme
-- [ ] Native function calling'e geçiş (Foundry Local model desteği yaygınlaşınca)
-- [ ] Sohbet geçmişinin SQLite'ta kalıcılaştırılması
-- [ ] `sqlite-vec` eklentisiyle ANN indeksleme (çok büyük arşivler için)
 
 ## Lisans
 

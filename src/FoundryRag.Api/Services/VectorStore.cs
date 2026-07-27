@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using FoundryRag.Api.Models;
 using Microsoft.Data.Sqlite;
 
@@ -12,6 +13,8 @@ namespace FoundryRag.Api.Services;
 /// </summary>
 public sealed class VectorStore
 {
+    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+
     private readonly string _connString;
 
     public string DataDir { get; }
@@ -72,6 +75,15 @@ public sealed class VectorStore
                 file_name   TEXT NOT NULL,
                 instruction TEXT NOT NULL,
                 created_at  TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                role         TEXT NOT NULL,
+                content      TEXT NOT NULL,
+                sources_json TEXT,
+                report_json  TEXT,
+                created_at   TEXT NOT NULL
             );
             """;
         await cmd.ExecuteNonQueryAsync();
@@ -357,6 +369,55 @@ public sealed class VectorStore
         var cmd = conn.CreateCommand();
         cmd.CommandText = "DELETE FROM reports WHERE id = $id;";
         cmd.Parameters.AddWithValue("$id", id);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    // ---------- Sohbet geçmişi ----------
+
+    public async Task<long> InsertChatMessageAsync(string role, string content, List<SourceRef>? sources, ReportInfo? report)
+    {
+        using var conn = Open();
+        var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO chat_messages (role, content, sources_json, report_json, created_at)
+            VALUES ($role, $content, $sources, $report, $at);
+            SELECT last_insert_rowid();
+            """;
+        cmd.Parameters.AddWithValue("$role", role);
+        cmd.Parameters.AddWithValue("$content", content);
+        cmd.Parameters.AddWithValue("$sources", sources is { Count: > 0 } ? JsonSerializer.Serialize(sources, JsonOpts) : (object)DBNull.Value);
+        cmd.Parameters.AddWithValue("$report", report is not null ? JsonSerializer.Serialize(report, JsonOpts) : (object)DBNull.Value);
+        cmd.Parameters.AddWithValue("$at", DateTime.UtcNow.ToString("O"));
+        return (long)(await cmd.ExecuteScalarAsync())!;
+    }
+
+    public async Task<List<ChatMessageDto>> ListChatMessagesAsync()
+    {
+        using var conn = Open();
+        var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, role, content, sources_json, report_json, created_at FROM chat_messages ORDER BY id;";
+        var list = new List<ChatMessageDto>();
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var sourcesJson = reader.IsDBNull(3) ? null : reader.GetString(3);
+            var reportJson = reader.IsDBNull(4) ? null : reader.GetString(4);
+            list.Add(new ChatMessageDto(
+                reader.GetInt64(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                sourcesJson is null ? null : JsonSerializer.Deserialize<List<SourceRef>>(sourcesJson, JsonOpts),
+                reportJson is null ? null : JsonSerializer.Deserialize<ReportInfo>(reportJson, JsonOpts),
+                DateTime.Parse(reader.GetString(5), null, System.Globalization.DateTimeStyles.RoundtripKind)));
+        }
+        return list;
+    }
+
+    public async Task ClearChatHistoryAsync()
+    {
+        using var conn = Open();
+        var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM chat_messages;";
         await cmd.ExecuteNonQueryAsync();
     }
 

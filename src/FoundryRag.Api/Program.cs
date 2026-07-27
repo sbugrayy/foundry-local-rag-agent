@@ -134,7 +134,7 @@ api.MapPost("/chat", async (ChatRequest request, AgentOrchestrator agent, Cancel
 // SSE akışlı sohbet: her olay `data: {json}\n\n` satırı olarak yazılır.
 // Olay tipleri: status | sources | delta | report | done | error
 var sseJson = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-api.MapPost("/chat/stream", async (HttpContext http, ChatRequest request, AgentOrchestrator agent) =>
+api.MapPost("/chat/stream", async (HttpContext http, ChatRequest request, AgentOrchestrator agent, VectorStore db) =>
 {
     if (string.IsNullOrWhiteSpace(request.Message))
     {
@@ -148,12 +148,28 @@ api.MapPost("/chat/stream", async (HttpContext http, ChatRequest request, AgentO
     http.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
 
     var ct = http.RequestAborted;
+
+    // Akış sırasında yayınlanan olayları izleyip nihai cevabı SQLite'a kalıcılaştırmak için biriktirir.
+    var answer = new System.Text.StringBuilder();
+    List<SourceRef>? sources = null;
+    ReportInfo? report = null;
+
     async Task Emit(object payload)
     {
         await http.Response.WriteAsync($"data: {JsonSerializer.Serialize(payload, sseJson)}\n\n", ct);
         await http.Response.Body.FlushAsync(ct);
+
+        dynamic e = payload;
+        switch ((string)e.type)
+        {
+            case "delta": answer.Append((string)e.text); break;
+            case "error": answer.Append((string)e.message); break;
+            case "sources": sources = (List<SourceRef>)e.sources; break;
+            case "report": report = (ReportInfo)e.report; break;
+        }
     }
 
+    await db.InsertChatMessageAsync("user", request.Message, null, null);
     try
     {
         await agent.HandleStreamAsync(request, Emit, ct);
@@ -162,6 +178,19 @@ api.MapPost("/chat/stream", async (HttpContext http, ChatRequest request, AgentO
     {
         // İstemci bağlantıyı kapattı
     }
+    if (answer.Length > 0)
+        await db.InsertChatMessageAsync("assistant", answer.ToString(), sources, report);
+});
+
+// ---------- Sohbet geçmişi ----------
+
+api.MapGet("/chat/history", async (VectorStore db) =>
+    Results.Ok(await db.ListChatMessagesAsync()));
+
+api.MapDelete("/chat/history", async (VectorStore db) =>
+{
+    await db.ClearChatHistoryAsync();
+    return Results.Ok(new { ok = true });
 });
 
 // ---------- Raporlar ----------
