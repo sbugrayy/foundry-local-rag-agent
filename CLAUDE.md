@@ -68,8 +68,12 @@ gelen satırların güncellenmesi gerekir:
 - **Durum pili:** `#pillDot` (`.ready/.error/.loading` class'ları), `#pillText`, `#docBadge`,
   `#reportBadge`.
 - **Sohbet:** `#chatMessages`, `#chatWelcome`, `#chatForm`, `#chatText`, `#chatSend`,
-  `#mentionMenu` + `.mention-item[data-name]` (@bahsetme menüsü), `.chip[data-example]`
-  (örnek sorular), mesaj balonları `.msg-bubble` üretimi JS içinde inline HTML olarak yapılıyor.
+  `#chatClearBtn` (geçmişi temizle), `#mentionMenu` + `.mention-item[data-name]` (@bahsetme
+  menüsü), `.chip[data-example]` (örnek sorular), mesaj balonları `.msg-bubble` üretimi JS
+  içinde inline HTML olarak yapılıyor.
+  Not: `#chatWelcome`'ın `outerHTML`'i sayfa yüklenirken saklanır ve geçmiş temizlenince geri
+  basılır (`app.js` → `chatWelcomeHtml`); bu yüzden `.chip` dinleyicileri `bindChipButtons()`
+  ile yeniden bağlanır — karşılama bloğunun yapısını değiştirirsen bu iki noktayı da güncelle.
 - **Belgeler:** `#dropzone`, `#fileInput`, `#browseBtn`, `#docsBody`, `#docsEmpty`.
 - **Raporlar:** `#formatSeg .seg-item[data-format]`, `#reportScope`, `#reportInstruction`,
   `#reportCreate`, `#reportProgress`, `#reportsBody`, `#reportsEmpty`.
@@ -80,10 +84,11 @@ gelen satırların güncellenmesi gerekir:
   Yeniden tasarımda bu token'ların isimleri korunursa (sadece değerleri değişse) `app.js`'teki
   inline `style.color = "var(--ok)"` gibi referanslar (örn. `app.js:146`) kırılmaz.
 
-**Şu an tasarım yeniden ele alınıyor** (bkz. proje hafızası/konuşma): mevcut arayüz jenerik
-"AI ürünü" görünümünde (mor→turkuaz gradient, emoji ikonlar, cam efektli kartlar). Hedef, aynı
-bilgi mimarisini (4 görünüm, aynı veri/etkileşim modeli) koruyarak daha özgün/profesyonel bir
-görsel dile geçmek — işlevsellik veya DOM kancaları feda edilmeden.
+**Tasarım Stitch tasarım sistemiyle yenilendi** (commit `052ff06`): jenerik "AI ürünü" dili
+(mor→turkuaz gradient, emoji ikonlar, cam efektli kartlar) yerine teknik hassasiyet dili
+benimsendi; bilgi mimarisi (4 görünüm) ve DOM kancaları korundu. Açık/koyu tema geçişi var —
+yeni bileşen eklerken rengi doğrudan yazmayın, `:root` token'larını kullanın ki iki temada da
+doğru görünsün.
 
 ## Kod Kuralları
 
@@ -100,7 +105,7 @@ görsel dile geçmek — işlevsellik veya DOM kancaları feda edilmeden.
 
 ## Yol Haritası (README'den, güncel öncelik sırası)
 
+- [x] Sohbet geçmişinin SQLite'ta kalıcılaştırılması (`chat_messages` tablosu)
 - [ ] Var olan Word/Excel dosyasında yerinde düzenleme
 - [ ] Native function calling'e geçiş (Foundry Local model desteği yaygınlaşınca)
-- [ ] Sohbet geçmişinin SQLite'ta kalıcılaştırılması
 - [ ] `sqlite-vec` eklentisiyle ANN indeksleme

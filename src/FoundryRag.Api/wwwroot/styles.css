@@ -164,6 +164,7 @@ body {
 @keyframes fadeIn { from { opacity: 0; } }
 
 .view-header { margin-bottom: 20px; }
+.view-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .view-header h1 { font-size: 21px; font-weight: 700; letter-spacing: -.2px; }
 .view-header p { color: var(--text-dim); font-size: 13px; margin-top: 4px; }
 

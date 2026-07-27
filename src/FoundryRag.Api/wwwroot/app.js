@@ -209,6 +209,7 @@ async function refreshStatus() {
 
 const chatMessages = $("#chatMessages");
 const chatText = $("#chatText");
+const chatWelcomeHtml = $("#chatWelcome")?.outerHTML || "";
 
 function addMessage(role, contentHtml) {
   $("#chatWelcome")?.remove();
@@ -404,11 +405,41 @@ document.addEventListener("click", (e) => {
   if (!mentionMenu.contains(e.target) && e.target !== chatText) hideMentionMenu();
 });
 
-$$(".chip").forEach(chip => {
-  chip.addEventListener("click", () => {
-    chatText.value = chip.dataset.example;
-    chatText.focus();
+function bindChipButtons() {
+  chatMessages.querySelectorAll(".chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      chatText.value = chip.dataset.example;
+      chatText.focus();
+    });
   });
+}
+bindChipButtons();
+
+/** Sayfa yenilense/uygulama yeniden başlasa da sohbet geçmişini SQLite'tan geri yükler. */
+async function loadChatHistory() {
+  try {
+    const messages = await api("/chat/history");
+    for (const m of messages) {
+      const html = renderMarkdown(m.content) + renderReportCard(m.report) + renderSources(m.sources || []);
+      addMessage(m.role, html);
+      state.history.push({ role: m.role, content: m.content });
+    }
+  } catch (err) {
+    toast(`Sohbet geçmişi yüklenemedi: ${err.message}`, "error");
+  }
+}
+
+$("#chatClearBtn").addEventListener("click", async () => {
+  if (!confirm("Sohbet geçmişi silinsin mi?")) return;
+  try {
+    await api("/chat/history", { method: "DELETE" });
+    state.history = [];
+    chatMessages.innerHTML = chatWelcomeHtml;
+    bindChipButtons();
+    toast("Sohbet geçmişi temizlendi.", "success");
+  } catch (err) {
+    toast(`Temizlenemedi: ${err.message}`, "error");
+  }
 });
 
 /* ---------- Belgeler ---------- */
@@ -718,3 +749,4 @@ $("#retryBtn").addEventListener("click", async () => {
 refreshStatus();
 loadDocuments();
 loadReports();
+loadChatHistory();
