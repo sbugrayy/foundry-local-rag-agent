@@ -4,6 +4,18 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
+/* ---------- İkonlar (Material emoji yerine çizgi SVG) ---------- */
+const ICONS = {
+  user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  bot: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/>',
+  paperclip: '<path d="M8 13.5V7a3 3 0 0 1 6 0v8a5 5 0 0 1-10 0V8"/>',
+  warning: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+  moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+};
+const icon = (name) => `<svg class="icon" viewBox="0 0 24 24">${ICONS[name] || ""}</svg>`;
+
 const state = {
   history: [],          // {role, content}
   reportFormat: "docx",
@@ -123,7 +135,7 @@ $$(".nav-item").forEach(btn => {
 function applyTheme(theme) {
   if (theme === "light") document.documentElement.setAttribute("data-theme", "light");
   else document.documentElement.removeAttribute("data-theme");
-  $("#themeIcon").textContent = theme === "light" ? "☀️" : "🌙";
+  $("#themeIcon").innerHTML = theme === "light" ? icon("sun") : icon("moon");
   $("#themeLabel").textContent = theme === "light" ? "Açık tema" : "Koyu tema";
 }
 
@@ -203,7 +215,7 @@ function addMessage(role, contentHtml) {
   const wrap = document.createElement("div");
   wrap.className = `msg ${role}`;
   wrap.innerHTML = `
-    <div class="msg-avatar">${role === "user" ? "🧑" : "🤖"}</div>
+    <div class="msg-avatar">${role === "user" ? icon("user") : icon("bot")}</div>
     <div class="msg-bubble">${contentHtml}</div>`;
   chatMessages.appendChild(wrap);
   chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -217,20 +229,18 @@ function renderSources(sources) {
   ).join("");
   return `
     <div class="msg-sources">
-      <button class="sources-toggle" onclick="this.nextElementSibling.classList.toggle('open')">📎 ${sources.length} kaynak parçası</button>
+      <button class="sources-toggle" onclick="this.nextElementSibling.classList.toggle('open')">${icon("paperclip")} ${sources.length} kaynak parçası</button>
       <div class="sources-list">${items}</div>
     </div>`;
 }
 
 function renderReportCard(report) {
   if (!report) return "";
-  const icons = { docx: "📝", xlsx: "📊", pdf: "📕" };
   return `
     <div class="report-card">
-      <div class="report-card-icon">${icons[report.format] || "📄"}</div>
       <div class="report-card-info">
         <div class="report-card-title">${escapeHtml(report.title)}</div>
-        <div class="report-card-sub">${report.format.toUpperCase()} · ${escapeHtml(report.fileName)}</div>
+        <div class="report-card-sub"><span class="format-badge ${report.format}">${report.format.toUpperCase()}</span> · ${escapeHtml(report.fileName)}</div>
       </div>
       <a class="btn btn-primary btn-sm" href="/api/reports/${report.id}/download">İndir</a>
     </div>`;
@@ -309,7 +319,7 @@ async function sendChat(message) {
     }
 
     if (errorMsg) {
-      bubble.innerHTML = (answer ? renderMarkdown(answer) : "") + `<p>⚠️ ${escapeHtml(errorMsg)}</p>`;
+      bubble.innerHTML = (answer ? renderMarkdown(answer) : "") + `<p>${icon("warning")} ${escapeHtml(errorMsg)}</p>`;
     } else {
       bubble.innerHTML = renderMarkdown(answer)
         + renderReportCard(report)
@@ -318,7 +328,7 @@ async function sendChat(message) {
     if (answer) state.history.push({ role: "assistant", content: answer });
     chatMessages.scrollTop = chatMessages.scrollHeight;
   } catch (err) {
-    bubble.innerHTML = `<p>⚠️ ${escapeHtml(err.message)}</p>`;
+    bubble.innerHTML = `<p>${icon("warning")} ${escapeHtml(err.message)}</p>`;
   } finally {
     $("#chatSend").disabled = false;
     chatText.focus();
@@ -371,7 +381,7 @@ function updateMentionMenu() {
   if (matches.length === 0) { hideMentionMenu(); return; }
 
   mentionMenu.innerHTML = matches
-    .map(d => `<button type="button" class="mention-item" data-name="${escapeHtml(d.fileName)}">📄 ${escapeHtml(d.fileName)}</button>`)
+    .map(d => `<button type="button" class="mention-item" data-name="${escapeHtml(d.fileName)}">${icon("file")} ${escapeHtml(d.fileName)}</button>`)
     .join("");
   mentionMenu.hidden = false;
 
@@ -403,16 +413,15 @@ $$(".chip").forEach(chip => {
 
 /* ---------- Belgeler ---------- */
 
-const fileIcons = { ".docx": "📝", ".pdf": "📕", ".xlsx": "📊", ".csv": "📈", ".txt": "📃", ".md": "📃" };
 const statusTr = { ready: "hazır", processing: "işleniyor", queued: "kuyrukta", error: "hata" };
 
 function refreshScopeSelect() {
   const select = $("#reportScope");
   const current = select.value;
-  select.innerHTML = '<option value="">📚 Tüm belgeler</option>' +
+  select.innerHTML = '<option value="">Tüm belgeler</option>' +
     state.docs
       .filter(d => d.status === "ready")
-      .map(d => `<option value="${d.id}">📄 ${escapeHtml(d.fileName)}</option>`)
+      .map(d => `<option value="${d.id}">${escapeHtml(d.fileName)}</option>`)
       .join("");
   if ([...select.options].some(o => o.value === current)) select.value = current;
 }
@@ -471,7 +480,7 @@ function renderDocsTable() {
   body.innerHTML = filtered.map(d => `
       <tr data-id="${d.id}">
         <td class="checkbox-col"><input type="checkbox" class="doc-checkbox" data-id="${d.id}" ${state.selectedDocIds.has(d.id) ? "checked" : ""}></td>
-        <td><div class="file-cell"><span class="file-ico">${fileIcons[d.extension] || "📄"}</span>${escapeHtml(d.fileName)}</div></td>
+        <td><div class="file-cell"><span class="file-ico">${escapeHtml((d.extension || "").replace(".", ""))}</span>${escapeHtml(d.fileName)}</div></td>
         <td>${formatSize(d.sizeBytes)}</td>
         <td><span class="status-chip ${d.status}">${d.status === "processing" ? '<span class="spinner"></span>' : ""}${statusTr[d.status] || d.status}${d.error ? ` — ${escapeHtml(d.error)}` : ""}</span></td>
         <td>${d.chunkCount || "—"}</td>
@@ -683,7 +692,7 @@ $("#reportCreate").addEventListener("click", async () => {
         documentId: scopeValue ? Number(scopeValue) : null,
       }),
     });
-    toast("Rapor oluşturuldu! 🎉", "success");
+    toast("Rapor oluşturuldu.", "success");
     $("#reportInstruction").value = "";
     loadReports();
     refreshStatus();

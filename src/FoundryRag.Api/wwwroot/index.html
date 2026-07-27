@@ -8,14 +8,16 @@
     if (localStorage.getItem("theme") === "light") document.documentElement.setAttribute("data-theme", "light");
   </script>
   <link rel="stylesheet" href="styles.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23adc6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><path d='M9 9h6v6H9z'/></svg>">
 </head>
 <body>
   <div class="layout">
     <!-- Kenar çubuğu -->
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-icon">⚡</div>
+        <div class="brand-icon">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+        </div>
         <div>
           <div class="brand-name">Foundry RAG Ajanı</div>
           <div class="brand-sub">Yerel Belge Zekâsı</div>
@@ -24,18 +26,18 @@
 
       <nav class="nav">
         <button class="nav-item active" data-view="chat">
-          <span class="nav-ico">💬</span> Sohbet
+          <span class="nav-ico"><svg class="icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span> Sohbet
         </button>
         <button class="nav-item" data-view="documents">
-          <span class="nav-ico">📄</span> Belgeler
+          <span class="nav-ico"><svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></span> Belgeler
           <span class="nav-badge" id="docBadge">0</span>
         </button>
         <button class="nav-item" data-view="reports">
-          <span class="nav-ico">📊</span> Raporlar
+          <span class="nav-ico"><svg class="icon" viewBox="0 0 24 24"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></span> Raporlar
           <span class="nav-badge" id="reportBadge">0</span>
         </button>
         <button class="nav-item" data-view="status">
-          <span class="nav-ico">🖥️</span> Durum
+          <span class="nav-ico"><svg class="icon" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span> Durum
         </button>
       </nav>
 
@@ -45,7 +47,7 @@
           <span id="pillText">Model hazırlanıyor…</span>
         </div>
         <button class="theme-toggle" id="themeToggle" title="Temayı değiştir">
-          <span id="themeIcon">🌙</span> <span id="themeLabel">Koyu tema</span>
+          <span id="themeIcon"><svg class="icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span> <span id="themeLabel">Koyu tema</span>
         </button>
         <div class="sidebar-note">%100 yerel — verileriniz cihazdan çıkmaz</div>
       </div>
@@ -64,7 +66,7 @@
         <div class="chat-box">
           <div class="chat-messages" id="chatMessages">
             <div class="chat-welcome" id="chatWelcome">
-              <div class="welcome-icon">🤖</div>
+              <div class="welcome-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6z"/></svg></div>
               <h2>Merhaba! Ben yerel belge ajanınım.</h2>
               <p>Belgeler yükle, sonra bana sorular sor. Örnekler:</p>
               <div class="chip-row">
@@ -91,7 +93,7 @@
 
         <div class="dropzone" id="dropzone">
           <input type="file" id="fileInput" multiple accept=".docx,.pdf,.xlsx,.csv,.txt,.md" hidden>
-          <div class="drop-icon">📂</div>
+          <div class="drop-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M16 16l-4-4-4 4"/><path d="M12 12v9"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg></div>
           <div class="drop-text"><strong>Dosya bırak</strong> ya da <button class="link-btn" id="browseBtn">bilgisayardan seç</button></div>
           <div class="drop-hint">.docx · .pdf · .xlsx · .csv · .txt · .md</div>
         </div>
@@ -145,12 +147,12 @@
           <div class="report-form-row">
             <div class="report-form-left">
               <div class="segmented" id="formatSeg">
-                <button class="seg-item active" data-format="docx">📝 Word</button>
-                <button class="seg-item" data-format="xlsx">📊 Excel</button>
-                <button class="seg-item" data-format="pdf">📕 PDF</button>
+                <button class="seg-item active" data-format="docx">Word</button>
+                <button class="seg-item" data-format="xlsx">Excel</button>
+                <button class="seg-item" data-format="pdf">PDF</button>
               </div>
               <select class="scope-select" id="reportScope" title="Raporun hangi belgelerden üretileceğini seçer">
-                <option value="">📚 Tüm belgeler</option>
+                <option value="">Tüm belgeler</option>
               </select>
             </div>
             <button class="btn btn-primary" id="reportCreate">Rapor Oluştur</button>
@@ -183,7 +185,7 @@
             <div class="status-title">Çalışma Zamanı</div>
             <div class="status-value" id="stateValue">—</div>
             <div class="status-msg" id="stateMsg">—</div>
-            <button class="btn btn-sm" id="retryBtn" hidden>🔄 Yeniden Dene</button>
+            <button class="btn btn-sm" id="retryBtn" hidden>Yeniden Dene</button>
           </div>
           <div class="card status-card">
             <div class="status-title">Sohbet Modeli</div>
